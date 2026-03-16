@@ -1,11 +1,4 @@
-// src/utils/sendMail.ts
-
-/**
- * sendMail - Simple SMTP wrapper for Deno + Brevo
- * Supports SSL (465) and STARTTLS (587)
- */
-
-import { getConfig } from '../config.ts';
+import { getConfig } from '@/config.ts';
 
 type SendMailParams = {
   to: string;

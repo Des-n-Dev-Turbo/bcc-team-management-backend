@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
+import { AppContext } from '@/types/context.ts';
 
-const app = new Hono();
+const app = new Hono<AppContext>();
 
 app.get('/', (c) => c.text('Deno + Hono is working!'));
 
