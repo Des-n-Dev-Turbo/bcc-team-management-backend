@@ -4,7 +4,13 @@
  * Ensures environment variables are loaded, validated, typed, and accessible.
  */
 
-import '@std/dotenv/load'; // Loads .env automatically in local dev
+import { load } from '@std/dotenv';
+
+// load base env
+await load({ envPath: '.env', export: true });
+
+// override with local
+await load({ envPath: '.env.local', export: true });
 
 // Define TypeScript type for the config object
 export interface AppConfig {

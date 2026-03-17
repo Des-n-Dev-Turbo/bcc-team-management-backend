@@ -1,5 +1,8 @@
 import { Context, Next } from 'hono';
-import { verifySupabaseJWT } from '@/lib/jwt.ts';
+import { verifySupabaseJWT } from '@/lib';
+
+import { AppError } from '@/utils/error.ts';
+import { ERROR_CODES } from '@/constants/error-codes.ts';
 
 export async function supabaseAuth(c: Context, next: Next) {
   const auth = c.req.header('Authorization');
@@ -18,6 +21,6 @@ export async function supabaseAuth(c: Context, next: Next) {
     await next();
   } catch (err) {
     console.error('JWT verify failed:', err);
-    return c.json({ error: 'Invalid token' }, 401);
+    throw new AppError('Missing token', ERROR_CODES.UNAUTHORIZED, 401);
   }
 }
