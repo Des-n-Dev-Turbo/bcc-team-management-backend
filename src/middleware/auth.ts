@@ -1,14 +1,14 @@
 import { Context, Next } from 'hono';
 import { verifySupabaseJWT } from '@/lib';
 
-import { AppError } from '@/utils/error.ts';
+import { AppError, getErrorMessage } from '@/utils/error.ts';
 import { ERROR_CODES } from '@/constants/error-codes.ts';
 
 export async function supabaseAuth(c: Context, next: Next) {
   const auth = c.req.header('Authorization');
 
   if (!auth?.startsWith('Bearer ')) {
-    return c.json({ error: 'Missing token' }, 401);
+    throw new AppError('Missing token', ERROR_CODES.UNAUTHORIZED, 401);
   }
 
   const token = auth.slice(7);
@@ -20,7 +20,11 @@ export async function supabaseAuth(c: Context, next: Next) {
 
     await next();
   } catch (err) {
-    console.error('JWT verify failed:', err);
-    throw new AppError('Missing token', ERROR_CODES.UNAUTHORIZED, 401);
+    console.error('JWT verify failed:', getErrorMessage(err));
+    throw new AppError(
+      'Invalid or expired token',
+      ERROR_CODES.UNAUTHORIZED,
+      401,
+    );
   }
 }

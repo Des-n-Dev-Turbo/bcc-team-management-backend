@@ -3,13 +3,26 @@ import type { AppContext } from '@/types';
 
 import profileRoutes from '@/routes/profile.routes.ts';
 import yearRoutes from '@/routes/years.routes.ts';
+import teamRoutes from '@/routes/teams.routes.ts';
+
+import { AppError, getErrorMessage } from '@/utils/error.ts';
 
 const app = new Hono<AppContext>();
 
-app.get('/', (c) => c.text('Deno + Hono is working!'));
-
 app.route('/profile', profileRoutes);
 
-app.route('/year', yearRoutes);
+app.route('/teams', teamRoutes);
+
+app.route('/years', yearRoutes);
+
+app.onError((error, c) => {
+  console.log(getErrorMessage(error));
+
+  if (error instanceof AppError) {
+    return c.json({ error: error.message }, error.statusCode);
+  }
+
+  return c.json({ error: 'Internal Server Error' }, 500);
+});
 
 Deno.serve({ port: 8080 }, app.fetch);

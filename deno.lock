@@ -2,8 +2,12 @@
   "version": "5",
   "specifiers": {
     "jsr:@std/assert@1": "1.0.15",
+    "jsr:@std/bytes@^1.0.6": "1.0.6",
+    "jsr:@std/crypto@^1.0.5": "1.0.5",
     "jsr:@std/dotenv@~0.225.5": "0.225.5",
     "jsr:@std/internal@^1.0.12": "1.0.12",
+    "jsr:@std/uuid@*": "1.1.0",
+    "jsr:@std/uuid@^1.1.0": "1.1.0",
     "npm:@hono/zod-validator@~0.7.4": "0.7.4_hono@4.10.6_zod@4.1.12",
     "npm:@supabase/supabase-js@^2.81.1": "2.81.1",
     "npm:hono@^4.10.6": "4.10.6",
@@ -17,11 +21,24 @@
         "jsr:@std/internal"
       ]
     },
+    "@std/bytes@1.0.6": {
+      "integrity": "f6ac6adbd8ccd99314045f5703e23af0a68d7f7e58364b47d2c7f408aeb5820a"
+    },
+    "@std/crypto@1.0.5": {
+      "integrity": "0dcfbb319fe0bba1bd3af904ceb4f948cde1b92979ec1614528380ed308a3b40"
+    },
     "@std/dotenv@0.225.5": {
       "integrity": "9ce6f9d0ec3311f74a32535aa1b8c62ed88b1ab91b7f0815797d77a6f60c922f"
     },
     "@std/internal@1.0.12": {
       "integrity": "972a634fd5bc34b242024402972cd5143eac68d8dffaca5eaa4dba30ce17b027"
+    },
+    "@std/uuid@1.1.0": {
+      "integrity": "6268db2ccf172849c9be80763354ca305d49ef4af41fe995623d44fcc3f7457c",
+      "dependencies": [
+        "jsr:@std/bytes",
+        "jsr:@std/crypto"
+      ]
     }
   },
   "npm": {
@@ -113,6 +130,7 @@
     "dependencies": [
       "jsr:@std/assert@1",
       "jsr:@std/dotenv@~0.225.5",
+      "jsr:@std/uuid@^1.1.0",
       "npm:@hono/zod-validator@~0.7.4",
       "npm:@supabase/supabase-js@^2.81.1",
       "npm:hono@^4.10.6",

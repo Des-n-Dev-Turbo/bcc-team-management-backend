@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
+import * as uuid from 'jsr:@std/uuid';
 
 import { supabaseAuth, loadProfile, requireRole } from '@/middleware';
-import { createYear } from '@/services';
+import { createYear, lockYear } from '@/services';
 
 import { type AppContext, Role } from '@/types';
-import { AppError, getErrorMessage } from '@/utils/error.ts';
+import { AppError } from '@/utils/error.ts';
 import { ERROR_CODES } from '@/constants/error-codes.ts';
 
 const router = new Hono<AppContext>();
@@ -38,18 +39,33 @@ router.post(
       );
     }
 
-    try {
-      const newYear = await createYear({ name, year });
-      return c.json(newYear, 201);
-    } catch (error) {
-      console.error(getErrorMessage(error));
+    const newYear = await createYear({ name, year });
+    return c.json(newYear, 201);
+  },
+);
 
-      if (error instanceof AppError) {
-        return c.json({ error: error.message }, error.statusCode);
-      }
+router.post(
+  '/:yearId/lock',
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  async (c) => {
+    const yearId = c.req.param('yearId');
 
-      return c.json({ error: 'Internal Server Error' }, 500);
+    if (!yearId) {
+      throw new AppError(
+        'Year ID is required',
+        ERROR_CODES.VALIDATION_ERROR,
+        400,
+      );
     }
+
+    if (!uuid.validate(yearId)) {
+      throw new AppError('Invalid year ID', ERROR_CODES.VALIDATION_ERROR, 400);
+    }
+
+    const lockedYear = await lockYear(yearId);
+    return c.json(lockedYear, 200);
   },
 );
 

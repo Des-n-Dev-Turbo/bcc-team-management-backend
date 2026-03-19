@@ -39,3 +39,50 @@ export const createYear = async ({
 
   return newYear;
 };
+
+export const lockYear = async (year: string) => {
+  const db = getSupabase();
+
+  const { data: fetchYear, error: fetchError } = await db
+    .from('years')
+    .select('id, is_locked')
+    .eq('id', year)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw new AppError(
+      'Failed to fetch year',
+      ERROR_CODES.YEAR_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!fetchYear) {
+    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+  }
+
+  if (fetchYear.is_locked) {
+    throw new AppError(
+      'Year is already locked',
+      ERROR_CODES.YEAR_ALREADY_LOCKED,
+      409,
+    );
+  }
+
+  const { data: lockedYear, error: lockedYearError } = await db
+    .from('years')
+    .update({ is_locked: true })
+    .eq('id', year)
+    .select('id, is_locked, name, year')
+    .single();
+
+  if (lockedYearError) {
+    throw new AppError(
+      'Failed to lock year',
+      ERROR_CODES.LOCK_YEAR_FAILED,
+      500,
+    );
+  }
+
+  return lockedYear;
+};
