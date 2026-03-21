@@ -1,7 +1,6 @@
 import { getSupabase } from '@/lib';
 import { AppError } from '@/utils/error.ts';
 import { ERROR_CODES } from '@/constants/error-codes.ts';
-import { normalizeName } from '@/utils/functions.ts';
 
 export const createTeam = async (teamName: string, yearId: string) => {
   const db = getSupabase();

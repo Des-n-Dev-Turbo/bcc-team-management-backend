@@ -1,10 +1,15 @@
-import { Context, Next } from 'hono';
+import type { MiddlewareHandler, Next } from 'hono';
 import { verifySupabaseJWT } from '@/lib';
 
 import { AppError, getErrorMessage } from '@/utils/error.ts';
 import { ERROR_CODES } from '@/constants/error-codes.ts';
 
-export async function supabaseAuth(c: Context, next: Next) {
+import type { AppContext } from '@/types';
+
+export const supabaseAuth: MiddlewareHandler<AppContext> = async (
+  c,
+  next: Next,
+) => {
   const auth = c.req.header('Authorization');
 
   if (!auth?.startsWith('Bearer ')) {
@@ -16,7 +21,9 @@ export async function supabaseAuth(c: Context, next: Next) {
   try {
     const payload = await verifySupabaseJWT(token);
 
-    c.set('userId', payload.sub);
+    if (payload && payload.sub) {
+      c.set('userId', payload.sub);
+    }
 
     await next();
   } catch (err) {
@@ -27,4 +34,4 @@ export async function supabaseAuth(c: Context, next: Next) {
       401,
     );
   }
-}
+};

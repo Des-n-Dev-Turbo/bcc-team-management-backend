@@ -1,10 +1,14 @@
-import { Context, Next } from 'hono';
-import { Role, hasRequiredRole } from '@/types';
+import type { MiddlewareHandler, Next } from 'hono';
+
 import { ERROR_CODES } from '@/constants/error-codes.ts';
 import { AppError } from '@/utils/error.ts';
 
-export function requireRole(requiredRole: Role) {
-  return async (c: Context, next: Next) => {
+import { type AppContext, Role, hasRequiredRole } from '@/types';
+
+export const requireRole = (
+  requiredRole: Role,
+): MiddlewareHandler<AppContext> => {
+  return async (c, next: Next) => {
     const profile = c.get('profile');
 
     if (!profile) {
@@ -23,4 +27,4 @@ export function requireRole(requiredRole: Role) {
 
     await next();
   };
-}
+};

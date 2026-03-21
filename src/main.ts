@@ -6,6 +6,7 @@ import yearRoutes from '@/routes/years.routes.ts';
 import teamRoutes from '@/routes/teams.routes.ts';
 
 import { AppError, getErrorMessage } from '@/utils/error.ts';
+import { ERROR_CODES } from '@/constants/error-codes.ts';
 
 const app = new Hono<AppContext>();
 
@@ -19,10 +20,19 @@ app.onError((error, c) => {
   console.log(getErrorMessage(error));
 
   if (error instanceof AppError) {
-    return c.json({ error: error.message }, error.statusCode);
+    return c.json(
+      { error: error.message, error_code: error.code },
+      error.statusCode,
+    );
   }
 
-  return c.json({ error: 'Internal Server Error' }, 500);
+  return c.json(
+    {
+      error: 'Internal Server Error',
+      error_code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+    },
+    500,
+  );
 });
 
 Deno.serve({ port: 8080 }, app.fetch);

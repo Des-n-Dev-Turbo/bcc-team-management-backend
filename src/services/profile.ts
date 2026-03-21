@@ -1,5 +1,7 @@
 import { getSupabase } from '@/lib/supabase.ts';
 import { Role } from '@/types/role.ts';
+import { AppError } from '@/utils/error.ts';
+import { ERROR_CODES } from '@/constants/error-codes.ts';
 
 export const bootstrapProfile = async (userId: string) => {
   const db = getSupabase();
@@ -11,8 +13,11 @@ export const bootstrapProfile = async (userId: string) => {
     .maybeSingle();
 
   if (fetchError) {
-    console.error('Error fetching profile:', fetchError);
-    throw new Error('Failed to fetch profile');
+    throw new AppError(
+      'Failed to fetch profile',
+      ERROR_CODES.PROFILE_LOOKUP_FAILED,
+      500,
+    );
   }
 
   if (existingProfile) {
@@ -29,8 +34,11 @@ export const bootstrapProfile = async (userId: string) => {
     .single();
 
   if (insertError) {
-    console.error('Error creating profile:', insertError);
-    throw new Error('Failed to create profile');
+    throw new AppError(
+      'Failed to create profile',
+      ERROR_CODES.PROFILE_CREATION_FAILED,
+      500,
+    );
   }
 
   return newProfile;

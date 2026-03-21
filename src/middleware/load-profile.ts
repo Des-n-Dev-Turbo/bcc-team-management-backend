@@ -1,10 +1,16 @@
-import { Context, Next } from 'hono';
+import type { MiddlewareHandler, Next } from 'hono';
+
 import { getSupabase } from '@/lib';
-import type { AppContext } from '@/types';
+
 import { ERROR_CODES } from '@/constants/error-codes.ts';
 import { AppError } from '@/utils/error.ts';
 
-export async function loadProfile(c: Context<AppContext>, next: Next) {
+import type { AppContext } from '@/types';
+
+export const loadProfile: MiddlewareHandler<AppContext> = async (
+  c,
+  next: Next,
+) => {
   const userId = c.get('userId');
 
   if (!userId) {
@@ -34,4 +40,4 @@ export async function loadProfile(c: Context<AppContext>, next: Next) {
   c.set('profile', data);
 
   await next();
-}
+};
