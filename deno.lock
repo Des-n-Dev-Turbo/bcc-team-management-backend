@@ -6,14 +6,17 @@
     "jsr:@std/assert@1": "1.0.15",
     "jsr:@std/bytes@^1.0.6": "1.0.6",
     "jsr:@std/crypto@^1.0.5": "1.0.5",
+    "jsr:@std/csv@^1.0.6": "1.0.6",
     "jsr:@std/dotenv@~0.225.5": "0.225.5",
     "jsr:@std/internal@^1.0.12": "1.0.12",
+    "jsr:@std/streams@^1.0.9": "1.0.17",
     "jsr:@std/uuid@*": "1.1.0",
     "jsr:@std/uuid@^1.1.0": "1.1.0",
     "jsr:@zod/zod@^4.3.6": "4.3.6",
     "npm:@supabase/supabase-js@^2.81.1": "2.81.1",
     "npm:hono@^4.10.6": "4.10.6",
-    "npm:jose@^6.1.2": "6.1.2"
+    "npm:jose@^6.1.2": "6.1.2",
+    "npm:zod@^4.1.13": "4.3.6"
   },
   "jsr": {
     "@hono/hono@4.12.8": {
@@ -22,7 +25,8 @@
     "@hono/zod-validator@0.7.6": {
       "integrity": "cc15ec57dd8a49e49d81f1790fb2d35cb96c9d3b8b14d8d0b851c00ab00e50ca",
       "dependencies": [
-        "jsr:@hono/hono"
+        "jsr:@hono/hono",
+        "npm:zod"
       ]
     },
     "@std/assert@1.0.15": {
@@ -37,11 +41,23 @@
     "@std/crypto@1.0.5": {
       "integrity": "0dcfbb319fe0bba1bd3af904ceb4f948cde1b92979ec1614528380ed308a3b40"
     },
+    "@std/csv@1.0.6": {
+      "integrity": "52ef0e62799a0028d278fa04762f17f9bd263fad9a8e7f98c14fbd371d62d9fd",
+      "dependencies": [
+        "jsr:@std/streams"
+      ]
+    },
     "@std/dotenv@0.225.5": {
       "integrity": "9ce6f9d0ec3311f74a32535aa1b8c62ed88b1ab91b7f0815797d77a6f60c922f"
     },
     "@std/internal@1.0.12": {
       "integrity": "972a634fd5bc34b242024402972cd5143eac68d8dffaca5eaa4dba30ce17b027"
+    },
+    "@std/streams@1.0.17": {
+      "integrity": "7859f3d9deed83cf4b41f19223d4a67661b3d3819e9fc117698f493bf5992140",
+      "dependencies": [
+        "jsr:@std/bytes"
+      ]
     },
     "@std/uuid@1.1.0": {
       "integrity": "6268db2ccf172849c9be80763354ca305d49ef4af41fe995623d44fcc3f7457c",
@@ -127,12 +143,16 @@
     },
     "ws@8.18.3": {
       "integrity": "sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg=="
+    },
+    "zod@4.3.6": {
+      "integrity": "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="
     }
   },
   "workspace": {
     "dependencies": [
       "jsr:@hono/zod-validator@~0.7.6",
       "jsr:@std/assert@1",
+      "jsr:@std/csv@^1.0.6",
       "jsr:@std/dotenv@~0.225.5",
       "jsr:@std/uuid@^1.1.0",
       "jsr:@zod/zod@^4.3.6",

@@ -1,0 +1,367 @@
+import * as zod from '@zod/zod';
+import { getSupabase } from '@/lib';
+import { AppError } from '@/utils/error.ts';
+import { ERROR_CODES } from '@/constants/error-codes.ts';
+
+import { BulkSucceededRow, BulkFailedRow, BulkAddResult } from '@/types';
+import { yearParticipantsSchema } from '@/schemas/year_participants.schema.ts';
+
+export const addYearParticipant = async ({
+  yearId,
+  userId,
+  name,
+  email,
+  mobile,
+  regId,
+}: {
+  yearId: string;
+  userId?: string;
+  name: string;
+  email: string;
+  mobile: string;
+  regId?: string;
+}) => {
+  const db = getSupabase();
+
+  const { data: fetchYear, error: fetchYearError } = await db
+    .from('years')
+    .select()
+    .eq('id', yearId)
+    .maybeSingle();
+
+  if (fetchYearError) {
+    throw new AppError(
+      'Failed to fetch year',
+      ERROR_CODES.YEAR_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!fetchYear) {
+    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+  }
+
+  if (fetchYear.is_locked) {
+    throw new AppError(
+      'Year is locked. Cannot add participants.',
+      ERROR_CODES.YEAR_ALREADY_LOCKED,
+      409,
+    );
+  }
+
+  let disqualifiedDetails = null;
+
+  const { data: existingParticipant, error: existingParticipantError } =
+    await db
+      .from('year_participants')
+      .select('id, year_id, name, email, banned, disqualified')
+      .eq('email', email)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+  if (existingParticipantError) {
+    throw new AppError(
+      'Failed to check existing participants',
+      ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (existingParticipant && existingParticipant.length > 0) {
+    // Banned logic: If there's an existing participant with the same email, check if any of them are banned. If yes, prevent registration and provide info about the ban.
+
+    if (existingParticipant[0].banned) {
+      const bannedParticipant = existingParticipant[0];
+
+      throw new AppError(
+        'A participant with this email was previously banned.',
+        ERROR_CODES.PARTICIPANT_BANNED,
+        403,
+        {
+          name: bannedParticipant.name,
+          email: bannedParticipant.email,
+        },
+      );
+    }
+
+    // Disqualify logic:
+    if (existingParticipant[0]?.disqualified) {
+      disqualifiedDetails = {
+        name: existingParticipant[0].name,
+        email: existingParticipant[0].email,
+      };
+    }
+  }
+
+  const { data: insertedParticipant, error: insertError } = await db
+    .from('year_participants')
+    .insert({
+      year_id: yearId,
+      ...(userId ? { user_id: userId } : {}),
+      name,
+      email,
+      mobile,
+      ...(regId ? { reg_id: regId } : {}),
+      banned: false,
+      disqualified: false,
+    })
+    .select()
+    .single();
+
+  if (insertError) {
+    if (insertError.code === '23505') {
+      throw new AppError(
+        'Participant with the same email already exists for this year',
+        ERROR_CODES.YEAR_PARTICIPANT_ALREADY_EXISTS,
+        409,
+      );
+    }
+
+    throw new AppError(
+      'Failed to add participant to the year',
+      ERROR_CODES.YEAR_PARTICIPANT_CREATION_FAILED,
+      500,
+    );
+  }
+
+  return { participant: insertedParticipant, disqualifiedDetails };
+};
+
+export const bulkAddYearParticipants = async ({
+  yearId,
+  rows,
+}: {
+  yearId: string;
+  rows: Record<string, string>[];
+}): Promise<BulkAddResult> => {
+  const db = getSupabase();
+
+  const { data: fetchYear, error: fetchYearError } = await db
+    .from('years')
+    .select()
+    .eq('id', yearId)
+    .maybeSingle();
+
+  if (fetchYearError) {
+    throw new AppError(
+      'Failed to fetch year',
+      ERROR_CODES.YEAR_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!fetchYear) {
+    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+  }
+
+  if (fetchYear.is_locked) {
+    throw new AppError(
+      'Year is locked. Cannot add participants.',
+      ERROR_CODES.YEAR_ALREADY_LOCKED,
+      409,
+    );
+  }
+
+  const succeededRows: BulkSucceededRow[] = [];
+  const failedRows: BulkFailedRow[] = [];
+  const validRows: {
+    rowNumber: number;
+    data: zod.infer<typeof yearParticipantsSchema>;
+  }[] = [];
+
+  for (const [index, row] of rows.entries()) {
+    const rowNumber = index + 2;
+
+    const parseResult = yearParticipantsSchema.safeParse(row);
+
+    if (!parseResult.success) {
+      failedRows.push({
+        row: rowNumber,
+        name: row?.name,
+        email: row?.email,
+        mobile: row?.mobile,
+        reason: `Validation failed - ${parseResult.error.issues.map((issue) => issue.message).join(', ')}`,
+      });
+      continue;
+    }
+
+    validRows.push({ rowNumber, data: parseResult.data });
+  }
+
+  if (validRows.length === 0) {
+    return { succeeded: succeededRows, failed: failedRows };
+  }
+
+  const validEmails = validRows.map((row) => row.data.email);
+
+  const { data: existingParticipants, error: existingParticipantsError } =
+    await db
+      .from('year_participants')
+      .select('id, year_id, name, email, banned, disqualified')
+      .in('email', validEmails)
+      .order('created_at', { ascending: false });
+
+  if (existingParticipantsError) {
+    throw new AppError(
+      'Failed to check existing participants',
+      ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
+      500,
+    );
+  }
+
+  const existingParticipantsMap = new Map<
+    string,
+    (typeof existingParticipants)[0]
+  >();
+
+  existingParticipants?.forEach((participant) => {
+    if (!existingParticipantsMap.has(participant.email)) {
+      existingParticipantsMap.set(participant.email, participant);
+    }
+  });
+
+  const rowsToInsert: {
+    year_id: string;
+    user_id?: string;
+    name: string;
+    email: string;
+    mobile: string;
+    reg_id?: string;
+    banned: boolean;
+    disqualified: boolean;
+  }[] = [];
+
+  const rowMetadata = new Map<
+    string,
+    {
+      row: number;
+      warning?: string;
+    }
+  >();
+
+  for (const { rowNumber, data } of validRows) {
+    const existingParticipant = existingParticipantsMap.get(data.email);
+
+    if (existingParticipant) {
+      if (existingParticipant.banned) {
+        failedRows.push({
+          row: rowNumber,
+          name: data.name,
+          email: data.email,
+          mobile: data.mobile,
+          reason: 'A participant with this email was previously banned.',
+        });
+        continue;
+      }
+
+      if (existingParticipant?.year_id === yearId) {
+        failedRows.push({
+          row: rowNumber,
+          name: data.name,
+          email: data.email,
+          mobile: data.mobile,
+          reason: 'Participant with this email already exists for this year.',
+        });
+        continue;
+      }
+
+      if (existingParticipant.disqualified) {
+        rowMetadata.set(data.email, {
+          row: rowNumber,
+          warning: `The participant ${existingParticipant.name} with email ${existingParticipant.email} was disqualified the last time they volunteered.`,
+        });
+      }
+    }
+
+    rowsToInsert.push({
+      year_id: yearId,
+      ...(data?.userId ? { user_id: data?.userId } : {}),
+      name: data.name,
+      email: data.email,
+      mobile: data.mobile,
+      ...(data?.regId ? { reg_id: data?.regId } : {}),
+      banned: false,
+      disqualified: false,
+    });
+
+    if (!rowMetadata.has(data.email)) {
+      rowMetadata.set(data.email, {
+        row: rowNumber,
+      });
+    }
+  }
+
+  if (rowsToInsert.length === 0) {
+    return { succeeded: succeededRows, failed: failedRows };
+  }
+
+  const { data: insertedParticipants, error: insertError } = await db
+    .from('year_participants')
+    .insert(rowsToInsert)
+    .select();
+
+  if (!insertError && insertedParticipants) {
+    // bulk succeeded — map to succeededRows
+    for (const inserted of insertedParticipants) {
+      const meta = rowMetadata.get(inserted.email);
+      succeededRows.push({
+        row: meta!.row,
+        name: inserted.name,
+        email: inserted.email,
+        mobile: inserted.mobile,
+        warning: meta?.warning,
+      });
+    }
+    return { succeeded: succeededRows, failed: failedRows };
+  }
+
+  // bulk failed
+  if (insertError.code !== '23505') {
+    throw new AppError(
+      'Failed to add participants',
+      ERROR_CODES.YEAR_PARTICIPANT_CREATION_FAILED,
+      500,
+    );
+  }
+
+  // fallback — one by one
+  for (const row of rowsToInsert) {
+    const { data: inserted, error: rowError } = await db
+      .from('year_participants')
+      .insert(row)
+      .select()
+      .single();
+
+    const meta = rowMetadata.get(row.email)!;
+
+    if (!rowError) {
+      succeededRows.push({
+        row: meta.row,
+        name: inserted.name,
+        email: inserted.email,
+        mobile: inserted.mobile,
+        warning: meta?.warning,
+      });
+      continue;
+    }
+
+    if (rowError.code === '23505') {
+      failedRows.push({
+        row: meta.row,
+        name: row.name,
+        email: row.email,
+        mobile: row.mobile,
+        reason: 'Participant already registered for this year.',
+      });
+      continue;
+    }
+
+    throw new AppError(
+      'Failed to add participant',
+      ERROR_CODES.YEAR_PARTICIPANT_CREATION_FAILED,
+      500,
+    );
+  }
+
+  return { succeeded: succeededRows, failed: failedRows };
+};

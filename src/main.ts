@@ -21,7 +21,11 @@ app.onError((error, c) => {
 
   if (error instanceof AppError) {
     return c.json(
-      { error: error.message, error_code: error.code },
+      {
+        error: error.message,
+        error_code: error.code,
+        ...(error.data ? { data: error.data } : {}),
+      },
       error.statusCode,
     );
   }

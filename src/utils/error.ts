@@ -4,15 +4,18 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 export class AppError extends Error {
   code: ErrorCode;
   statusCode: ContentfulStatusCode;
+  data: Record<string, unknown> | undefined;
 
   constructor(
     message: string,
     code: ErrorCode,
     statusCode: ContentfulStatusCode = 500,
+    data?: Record<string, unknown>,
   ) {
     super(message);
     this.code = code;
     this.statusCode = statusCode;
+    this.data = data;
   }
 }
 
