@@ -1,11 +1,21 @@
 import { Hono } from 'hono';
 import { CsvParseStream } from '@std/csv/parse-stream';
 
-import { supabaseAuth, requireRole, loadProfile } from '@/middleware';
-import { addYearParticipant, bulkAddYearParticipants } from '@/services';
+import {
+  supabaseAuth,
+  requireRole,
+  loadProfile,
+  requireYearAccess,
+} from '@/middleware';
+import {
+  addYearParticipant,
+  bulkAddYearParticipants,
+  getYearsParticipants,
+} from '@/services';
 import {
   yearParticipantsSchema,
   yearParticipantsParamsSchema,
+  getYearParticipantsQuerySchema,
 } from '@/schemas/year_participants.schema.ts';
 import { validate, getValidated } from '@/utils/validate.ts';
 import { AppError } from '@/utils/error.ts';
@@ -85,6 +95,38 @@ yearsParticipantRouter.post(
     const results = await bulkAddYearParticipants({ yearId, rows: records });
 
     return c.json(results, 207);
+  },
+);
+
+yearsParticipantRouter.get(
+  '/',
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Viewer),
+  requireYearAccess,
+  validate('param', yearParticipantsParamsSchema),
+  validate('query', getYearParticipantsQuerySchema),
+  async (c) => {
+    const { yearId } = getValidated(c, 'param', yearParticipantsParamsSchema);
+
+    const filters = getValidated(c, 'query', getYearParticipantsQuerySchema);
+
+    const userId = c.get('userId');
+    const role = c.get('profile').global_role as Role;
+
+    const { participants, total, page, pageSize } = await getYearsParticipants({
+      yearId,
+      filters,
+      userId,
+      role,
+    });
+
+    return c.json({
+      participants,
+      total,
+      page,
+      pageSize,
+    });
   },
 );
 

@@ -1,10 +1,19 @@
 import * as zod from '@zod/zod';
 import { getSupabase } from '@/lib';
 import { AppError } from '@/utils/error.ts';
-import { ERROR_CODES } from '@/constants/error-codes.ts';
-
-import { BulkSucceededRow, BulkFailedRow, BulkAddResult } from '@/types';
 import { yearParticipantsSchema } from '@/schemas/year_participants.schema.ts';
+import { applyPrivacyMask, getRequesterTeam } from '@/utils/participants.ts';
+
+import { ERROR_CODES } from '@/constants/error-codes.ts';
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '@/constants/common.ts';
+import {
+  type BulkSucceededRow,
+  type BulkFailedRow,
+  type BulkAddResult,
+  type YearParticipantFilters,
+  Role,
+  hasRequiredRole,
+} from '@/types';
 
 export const addYearParticipant = async ({
   yearId,
@@ -364,4 +373,109 @@ export const bulkAddYearParticipants = async ({
   }
 
   return { succeeded: succeededRows, failed: failedRows };
+};
+
+export const getYearsParticipants = async ({
+  yearId,
+  userId,
+  role,
+  filters,
+}: {
+  yearId: string;
+  userId: string;
+  role: Role;
+  filters: YearParticipantFilters;
+}) => {
+  const db = getSupabase();
+
+  const { canSeePII } = await getRequesterTeam({
+    yearId,
+    userId,
+    role,
+  });
+
+  const hasPIIPermission = hasRequiredRole(role, Role.Admin);
+
+  let nameFilter: string | undefined;
+  let emailFilter: string | undefined;
+  let mobileFilter: string | undefined;
+
+  if (hasPIIPermission) {
+    if (filters.email) {
+      emailFilter = filters.email;
+    } else if (filters.mobile) {
+      mobileFilter = filters.mobile;
+    } else if (filters.name) {
+      nameFilter = filters.name;
+    }
+  } else {
+    if (filters.name) {
+      nameFilter = filters.name;
+    }
+  }
+
+  const sortColumn: 'name' | 'email' = hasPIIPermission
+    ? (filters.sort ?? 'name')
+    : 'name';
+  const sortAscending = filters.order !== 'desc';
+
+  let baseQuery = db
+    .from('year_participants')
+    .select(
+      'id, name, email, mobile, reg_id, banned, disqualified, team_memberships(id, team_id, is_team_lead)',
+      { count: 'exact' },
+    )
+    .eq('year_id', yearId)
+    .or('banned.eq.false,banned.is.null')
+    .order(sortColumn, { ascending: sortAscending });
+
+  if (nameFilter) {
+    baseQuery = baseQuery.ilike('name', `%${nameFilter}%`);
+  }
+
+  if (emailFilter) {
+    baseQuery = baseQuery.ilike('email', `%${emailFilter}%`);
+  }
+
+  if (mobileFilter) {
+    baseQuery = baseQuery.ilike('mobile', `%${mobileFilter}%`);
+  }
+
+  const page = Math.max(DEFAULT_PAGE, filters.page ?? DEFAULT_PAGE);
+  const from = (page - 1) * DEFAULT_PAGE_SIZE;
+  const to = from + DEFAULT_PAGE_SIZE - 1;
+
+  const { data, error, count } = await baseQuery.range(from, to);
+
+  if (error) {
+    throw new AppError(
+      'Failed to fetch participants',
+      ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
+      500,
+    );
+  }
+
+  const participantsData = (data ?? []).map((item) => {
+    return {
+      id: item.id,
+      team_member_id: item.team_memberships[0]?.id ?? null,
+      name: item.name,
+      email: item.email,
+      mobile: item.mobile,
+      reg_id: item.reg_id,
+      banned: item.banned,
+      disqualified: item.disqualified,
+      team_id: item.team_memberships[0]?.team_id ?? null,
+      is_team_lead: item.team_memberships[0]?.is_team_lead ?? false,
+    };
+  });
+
+  const maskedData = applyPrivacyMask(participantsData, canSeePII);
+
+  return {
+    participants: maskedData,
+    total: count ?? 0,
+    page,
+    pageSize: DEFAULT_PAGE_SIZE,
+  };
 };

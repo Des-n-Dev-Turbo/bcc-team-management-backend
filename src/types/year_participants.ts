@@ -18,3 +18,12 @@ export type BulkAddResult = {
   succeeded: BulkSucceededRow[];
   failed: BulkFailedRow[];
 };
+
+export type YearParticipantFilters = {
+  page?: number;
+  name?: string;
+  email?: string;
+  mobile?: string;
+  sort?: 'name' | 'email';
+  order?: 'asc' | 'desc';
+};
