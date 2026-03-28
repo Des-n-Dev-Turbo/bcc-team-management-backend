@@ -1,0 +1,1 @@
+export const MAX_YEAR_REQUEST_ATTEMPTS = 3;

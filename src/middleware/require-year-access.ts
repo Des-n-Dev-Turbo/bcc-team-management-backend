@@ -69,5 +69,12 @@ export const requireYearAccess: MiddlewareHandler<AppContext> = async (
     );
   }
 
+  c.set('yearAccess', {
+    id: yearAccessData.id,
+    year_id: yearAccessData.year_id,
+    user_id: yearAccessData.user_id,
+    status: yearAccessData.status,
+  });
+
   await next();
 };

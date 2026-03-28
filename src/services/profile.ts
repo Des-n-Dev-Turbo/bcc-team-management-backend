@@ -3,7 +3,15 @@ import { Role } from '@/types/role.ts';
 import { AppError } from '@/utils/error.ts';
 import { ERROR_CODES } from '@/constants/error-codes.ts';
 
-export const bootstrapProfile = async (userId: string) => {
+export const bootstrapProfile = async ({
+  userId,
+  email,
+  name,
+}: {
+  userId: string;
+  email: string | null;
+  name: string | null;
+}) => {
   const db = getSupabase();
 
   const { data: existingProfile, error: fetchError } = await db
@@ -21,6 +29,7 @@ export const bootstrapProfile = async (userId: string) => {
   }
 
   if (existingProfile) {
+    await db.from('profiles').update({ name, email }).eq('id', userId);
     return existingProfile;
   }
 
@@ -29,6 +38,8 @@ export const bootstrapProfile = async (userId: string) => {
     .insert({
       id: userId,
       global_role: Role.Viewer,
+      name,
+      email,
     })
     .select('id, global_role')
     .single();

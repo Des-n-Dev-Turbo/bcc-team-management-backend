@@ -8,6 +8,8 @@ export type AppContext = {
       id: string;
       global_role: Role;
     };
+    email: string | null;
+    name: string | null;
     yearAccess: {
       id: string;
       user_id: string;

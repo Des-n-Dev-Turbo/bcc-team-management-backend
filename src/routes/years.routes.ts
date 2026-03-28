@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 
 import { supabaseAuth, loadProfile, requireRole } from '@/middleware';
-import { createYear, lockYear } from '@/services';
+import { createYear, getYears, lockYear } from '@/services';
 import { createYearSchema, lockYearSchema } from '@/schemas/years.schema.ts';
 import yearsParticipantRouter from './year_participants.routes.ts';
 
@@ -36,6 +36,16 @@ router.post(
     return c.json(lockedYear, 200);
   },
 );
+
+router.get('/', supabaseAuth, loadProfile, async (c) => {
+  const userId = c.get('userId');
+
+  const profile = c.get('profile');
+
+  const years = await getYears({ userId, role: profile.global_role });
+
+  return c.json(years, 200);
+});
 
 router.route('/:yearId/participants', yearsParticipantRouter);
 

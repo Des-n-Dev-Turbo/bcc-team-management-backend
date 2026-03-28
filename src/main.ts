@@ -1,12 +1,14 @@
 import { Hono } from 'hono';
-import type { AppContext } from '@/types';
 
 import profileRoutes from '@/routes/profile.routes.ts';
-import yearRoutes from '@/routes/years.routes.ts';
 import teamRoutes from '@/routes/teams.routes.ts';
+import yearRoutes from '@/routes/years.routes.ts';
+import yearAccessRouter from '@/routes/year_access.routes.ts';
 
 import { AppError, getErrorMessage } from '@/utils/error.ts';
 import { ERROR_CODES } from '@/constants/error-codes.ts';
+
+import type { AppContext } from '@/types';
 
 const app = new Hono<AppContext>();
 
@@ -15,6 +17,8 @@ app.route('/profile', profileRoutes);
 app.route('/teams', teamRoutes);
 
 app.route('/years', yearRoutes);
+
+app.route('/year-access', yearAccessRouter);
 
 app.onError((error, c) => {
   console.log(getErrorMessage(error));

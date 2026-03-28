@@ -17,3 +17,30 @@ export const yearParticipantsSchema = zod.object({
     .regex(/^\d{10}$/),
   regId: zod.string().trim().min(5).max(12).optional(),
 });
+
+export const getYearParticipantsQuerySchema = zod.object({
+  page: zod
+    .string()
+    .optional()
+    .transform((val) => parseInt(val ?? '1', 10))
+    .pipe(zod.number().min(1)),
+  name: zod
+    .string()
+    .optional()
+    .transform((val) => val?.trim()),
+  email: zod
+    .string()
+    .optional()
+    .transform((val) => val?.trim()),
+  mobile: zod
+    .string()
+    .optional()
+    .transform((val) => val?.trim()),
+  sort: zod.enum(['name', 'email']).optional().default('name'),
+  order: zod.enum(['asc', 'desc']).optional().default('asc'),
+});
+
+export const getTeamParticipantsParamsSchema = zod.object({
+  yearId: uuidSchema,
+  teamId: uuidSchema,
+});
