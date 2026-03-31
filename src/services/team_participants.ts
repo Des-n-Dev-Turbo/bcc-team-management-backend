@@ -1,0 +1,78 @@
+import { getSupabase } from '@/lib';
+import { AppError } from '@/utils/error.ts';
+import { applyPrivacyMask, getRequesterTeam } from '@/utils/participants.ts';
+import { ERROR_CODES } from '@/constants/error-codes.ts';
+
+import { Role } from '@/types';
+
+export const getTeamYearParticipants = async ({
+  yearId,
+  teamId,
+  userId,
+  role,
+}: {
+  yearId: string;
+  teamId: string;
+  userId: string;
+  role: Role;
+}) => {
+  const db = getSupabase();
+
+  const { data: teamData } = await db
+    .from('teams')
+    .select('id')
+    .eq('id', teamId)
+    .eq('year_id', yearId)
+    .maybeSingle();
+
+  if (!teamData) {
+    throw new AppError('Team not found', ERROR_CODES.TEAM_NOT_FOUND, 404);
+  }
+
+  const { canSeePII } = await getRequesterTeam({
+    yearId,
+    userId,
+    role,
+  });
+
+  const { data: participantsData, error: participantsError } = await db
+    .from('year_participants')
+    .select(
+      'id, name, email, mobile, reg_id, banned, disqualified, team_memberships!inner(id, team_id, is_team_lead)',
+    )
+    .eq('team_memberships.team_id', teamData.id)
+    .eq('year_id', yearId)
+    .or('banned.eq.false,banned.is.null')
+    .is('user_id', null)
+    .order('name', { ascending: true })
+    .limit(50);
+
+  if (participantsError) {
+    throw new AppError(
+      'Failed to fetch team participants',
+      ERROR_CODES.TEAM_PARTICIPANT_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!participantsData || participantsData.length === 0) {
+    return [];
+  }
+
+  const teamParticipantsData = (participantsData || []).map((item) => ({
+    id: item.id,
+    name: item.name,
+    email: item.email,
+    mobile: item.mobile,
+    reg_id: item.reg_id,
+    banned: item.banned,
+    disqualified: item.disqualified,
+    team_membership_id: item.team_memberships[0]?.id ?? null,
+    team_id: item.team_memberships[0]?.team_id ?? null,
+    is_team_lead: item.team_memberships[0]?.is_team_lead ?? false,
+  }));
+
+  const maskedParticipants = applyPrivacyMask(teamParticipantsData, canSeePII);
+
+  return maskedParticipants;
+};

@@ -426,6 +426,7 @@ export const getYearsParticipants = async ({
       { count: 'exact' },
     )
     .eq('year_id', yearId)
+    .is('user_id', null)
     .or('banned.eq.false,banned.is.null')
     .order(sortColumn, { ascending: sortAscending });
 
@@ -465,6 +466,7 @@ export const getYearsParticipants = async ({
       reg_id: item.reg_id,
       banned: item.banned,
       disqualified: item.disqualified,
+      team_membership_id: item.team_memberships[0]?.id ?? null,
       team_id: item.team_memberships[0]?.team_id ?? null,
       is_team_lead: item.team_memberships[0]?.is_team_lead ?? false,
     };

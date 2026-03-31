@@ -4,6 +4,7 @@ import { supabaseAuth, loadProfile, requireRole } from '@/middleware';
 import { createYear, getYears, lockYear } from '@/services';
 import { createYearSchema, lockYearSchema } from '@/schemas/years.schema.ts';
 import yearsParticipantRouter from './year_participants.routes.ts';
+import teamParticipantsRouter from './team_participants.routes.ts';
 
 import { validate, getValidated } from '@/utils/validate.ts';
 import { type AppContext, Role } from '@/types';
@@ -48,5 +49,7 @@ router.get('/', supabaseAuth, loadProfile, async (c) => {
 });
 
 router.route('/:yearId/participants', yearsParticipantRouter);
+
+router.route('/:yearId/teams', teamParticipantsRouter);
 
 export default router;

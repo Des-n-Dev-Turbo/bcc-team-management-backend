@@ -1,0 +1,46 @@
+import { Hono } from 'hono';
+
+import {
+  supabaseAuth,
+  requireRole,
+  loadProfile,
+  requireYearAccess,
+} from '@/middleware';
+
+import { getTeamYearParticipants } from '@/services/team_participants.ts';
+import { validate, getValidated } from '@/utils/validate.ts';
+import { getTeamParticipantsParamsSchema } from '@/schemas/year_participants.schema.ts';
+
+import { type AppContext, Role } from '@/types';
+
+const teamParticipantsRouter = new Hono<AppContext>();
+
+teamParticipantsRouter.get(
+  '/:teamId/participants',
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Viewer),
+  requireYearAccess,
+  validate('param', getTeamParticipantsParamsSchema),
+  async (c) => {
+    const { yearId, teamId } = getValidated(
+      c,
+      'param',
+      getTeamParticipantsParamsSchema,
+    );
+
+    const userId = c.get('userId');
+    const role = c.get('profile').global_role as Role;
+
+    const participants = await getTeamYearParticipants({
+      yearId,
+      teamId,
+      userId,
+      role,
+    });
+
+    return c.json(participants, 200);
+  },
+);
+
+export default teamParticipantsRouter;
