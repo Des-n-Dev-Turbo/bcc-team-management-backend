@@ -9,13 +9,20 @@ import {
 } from '@/middleware';
 import {
   addYearParticipant,
+  banParticipant,
   bulkAddYearParticipants,
   getYearsParticipants,
+  unbanParticipant,
+  disqualifyParticipant,
+  undisqualifyParticipant,
 } from '@/services';
 import {
   yearParticipantsSchema,
   yearParticipantsParamsSchema,
   getYearParticipantsQuerySchema,
+  yearParticipantsBanParamsSchema,
+  yearParticipantsUnbanParamsSchema,
+  yearParticipantsUnbanQuerySchema,
 } from '@/schemas/year_participants.schema.ts';
 import { validate, getValidated } from '@/utils/validate.ts';
 import { AppError } from '@/utils/error.ts';
@@ -127,6 +134,95 @@ yearsParticipantRouter.get(
       page,
       pageSize,
     });
+  },
+);
+
+yearsParticipantRouter.patch(
+  '/:participantId/ban',
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate('param', yearParticipantsBanParamsSchema),
+  async (c) => {
+    const params = getValidated(c, 'param', yearParticipantsBanParamsSchema);
+
+    const result = await banParticipant(params);
+
+    if (result.account_disabled && !result.db_updated) {
+      return c.json(
+        {
+          status: 'partial_success',
+          message:
+            'Account disabled in Auth, but DB update failed. Manual intervention required.',
+          details: result,
+        },
+        207,
+      );
+    }
+
+    return c.json(result.data, 200);
+  },
+);
+
+yearsParticipantRouter.patch(
+  '/:participantId/unban',
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate('param', yearParticipantsUnbanParamsSchema),
+  validate('query', yearParticipantsUnbanQuerySchema),
+  async (c) => {
+    const params = getValidated(c, 'param', yearParticipantsUnbanParamsSchema);
+    const query = getValidated(c, 'query', yearParticipantsUnbanQuerySchema);
+
+    const result = await unbanParticipant({
+      ...params,
+      restoreCompleteAccess: query.restoreAuth,
+    });
+
+    if (result.auth_restored && !result.db_updated) {
+      return c.json(
+        {
+          status: 'partial_success',
+          message:
+            'Auth restored, but DB update failed. Manual intervention required to restore participant access.',
+          details: result,
+        },
+        207,
+      );
+    }
+
+    return c.json(result.data, 200);
+  },
+);
+
+yearsParticipantRouter.patch(
+  '/:participantId/disqualify',
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate('param', yearParticipantsBanParamsSchema),
+  async (c) => {
+    const params = getValidated(c, 'param', yearParticipantsBanParamsSchema);
+
+    const result = await disqualifyParticipant(params);
+
+    return c.json(result, 200);
+  },
+);
+
+yearsParticipantRouter.patch(
+  '/:participantId/undisqualify',
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate('param', yearParticipantsBanParamsSchema),
+  async (c) => {
+    const params = getValidated(c, 'param', yearParticipantsBanParamsSchema);
+
+    const result = await undisqualifyParticipant(params);
+
+    return c.json(result, 200);
   },
 );
 

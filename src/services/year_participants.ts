@@ -2,7 +2,12 @@ import * as zod from '@zod/zod';
 import { getSupabase } from '@/lib';
 import { AppError } from '@/utils/error.ts';
 import { yearParticipantsSchema } from '@/schemas/year_participants.schema.ts';
-import { applyPrivacyMask, getRequesterTeam } from '@/utils/participants.ts';
+import {
+  applyPrivacyMask,
+  getRequesterTeam,
+  banTeamLead,
+  banVolunteer,
+} from '@/utils/participants.ts';
 
 import { ERROR_CODES } from '@/constants/error-codes.ts';
 import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '@/constants/common.ts';
@@ -13,6 +18,8 @@ import {
   type YearParticipantFilters,
   Role,
   hasRequiredRole,
+  type ParticipantBanResult,
+  ParticipantUnbanResult,
 } from '@/types';
 
 export const addYearParticipant = async ({
@@ -480,4 +487,405 @@ export const getYearsParticipants = async ({
     page,
     pageSize: DEFAULT_PAGE_SIZE,
   };
+};
+
+export const banParticipant = async ({
+  yearId,
+  participantId,
+}: {
+  yearId: string;
+  participantId: string;
+}): Promise<ParticipantBanResult> => {
+  const db = getSupabase();
+
+  const { data: fetchYearParticipant, error: fetchYearParticipantError } =
+    await db
+      .from('year_participants')
+      .select('id, user_id, banned')
+      .eq('id', participantId)
+      .eq('year_id', yearId)
+      .or('banned.eq.false,banned.is.null')
+      .maybeSingle();
+
+  if (fetchYearParticipantError) {
+    throw new AppError(
+      'Failed to fetch year participant',
+      ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!fetchYearParticipant) {
+    throw new AppError(
+      'Participant not found or already banned',
+      ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND_OR_ALREADY_BANNED,
+      404,
+    );
+  }
+
+  if (!fetchYearParticipant.user_id) {
+    return await banVolunteer({ participantId });
+  }
+
+  const { data: profileData, error: profileError } = await db
+    .from('profiles')
+    .select('id, global_role')
+    .eq('id', fetchYearParticipant.user_id)
+    .maybeSingle();
+
+  if (profileError) {
+    throw new AppError(
+      'Failed to fetch participant profile',
+      ERROR_CODES.PROFILE_LOOKUP_FAILED,
+      500,
+    );
+  }
+
+  if (!profileData) {
+    throw new AppError(
+      'Participant profile not found',
+      ERROR_CODES.PROFILE_NOT_FOUND,
+      404,
+    );
+  }
+
+  if (
+    profileData.global_role === Role.Admin ||
+    profileData.global_role === Role.Superadmin
+  ) {
+    throw new AppError(
+      'Cannot ban a participant with admin or superadmin role',
+      ERROR_CODES.TEAM_LEAD_BAN_FAILED,
+      403,
+    );
+  }
+
+  if (profileData.global_role !== Role.User) {
+    throw new AppError(
+      'Unexpected participant role',
+      ERROR_CODES.FORBIDDEN,
+      403,
+    );
+  }
+
+  return await banTeamLead({
+    participantId,
+    yearId,
+    userId: profileData.id,
+  });
+};
+
+export const unbanParticipant = async ({
+  yearId,
+  participantId,
+  restoreCompleteAccess = false,
+}: {
+  yearId: string;
+  participantId: string;
+  restoreCompleteAccess?: boolean;
+}): Promise<ParticipantUnbanResult> => {
+  const db = getSupabase();
+
+  const { data: participantData, error: participantError } = await db
+    .from('year_participants')
+    .select('id, user_id, banned')
+    .eq('id', participantId)
+    .eq('year_id', yearId)
+    .maybeSingle();
+
+  if (participantError) {
+    throw new AppError(
+      'Failed to fetch participant',
+      ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
+      500,
+    );
+  }
+  if (!participantData) {
+    throw new AppError(
+      'Participant not found',
+      ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND,
+      404,
+    );
+  }
+
+  if (!participantData.banned) {
+    throw new AppError(
+      'Participant is not banned',
+      ERROR_CODES.YEAR_PARTICIPANT_NOT_BANNED,
+      400,
+    );
+  }
+
+  let auth_restored = false;
+
+  if (participantData.user_id) {
+    const { error: authError } = await db.auth.admin.updateUserById(
+      participantData.user_id,
+      {
+        ban_duration: 'none',
+      },
+    );
+
+    if (authError) {
+      throw new AppError(
+        'Auth API failed to restore account',
+        ERROR_CODES.PARTICIPANT_BAN_FAILED,
+        500,
+      );
+    }
+
+    auth_restored = true;
+  }
+
+  const { error: rpcError } = await db.rpc('unban_participant', {
+    p_participant_id: participantId,
+  });
+
+  if (rpcError) {
+    if (!participantData.user_id) {
+      throw new AppError(
+        'Failed to unban participant',
+        ERROR_CODES.PARTICIPANT_UNBAN_FAILED,
+        500,
+      );
+    }
+
+    return {
+      success: false,
+      auth_restored,
+      restoredCompleteAccess: false,
+      db_updated: false,
+      data: null,
+    };
+  }
+
+  const { data: updatedRecord } = await db
+    .from('year_participants')
+    .select('*')
+    .eq('id', participantId)
+    .maybeSingle();
+
+  if (!restoreCompleteAccess) {
+    return {
+      success: true,
+      auth_restored,
+      restoredCompleteAccess: false,
+      db_updated: true,
+      data: updatedRecord,
+    };
+  }
+
+  if (!(restoreCompleteAccess && participantData.user_id)) {
+    return {
+      success: false,
+      auth_restored,
+      restoredCompleteAccess: false,
+      db_updated: true,
+      data: updatedRecord,
+    };
+  }
+
+  const { error: restoreAccessRpcError } = await db.rpc(
+    'restore_team_lead_access',
+    {
+      p_year_id: yearId,
+      p_user_id: participantData.user_id,
+    },
+  );
+
+  if (restoreAccessRpcError) {
+    return {
+      success: false,
+      auth_restored,
+      restoredCompleteAccess: false,
+      db_updated: true,
+      data: updatedRecord,
+    };
+  }
+
+  return {
+    success: true,
+    auth_restored,
+    restoredCompleteAccess: true,
+    db_updated: true,
+    data: updatedRecord,
+  };
+};
+
+export const disqualifyParticipant = async ({
+  yearId,
+  participantId,
+}: {
+  yearId: string;
+  participantId: string;
+}) => {
+  const db = getSupabase();
+
+  const { data: yearData, error: yearError } = await db
+    .from('years')
+    .select('id, is_locked')
+    .eq('id', yearId)
+    .maybeSingle();
+
+  if (yearError) {
+    throw new AppError(
+      'Failed to fetch year',
+      ERROR_CODES.YEAR_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!yearData) {
+    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+  }
+
+  if (yearData.is_locked) {
+    throw new AppError(
+      'Year is locked. Cannot disqualify participants.',
+      ERROR_CODES.YEAR_ALREADY_LOCKED,
+      409,
+    );
+  }
+
+  const { data: participantData, error: participantError } = await db
+    .from('year_participants')
+    .select(
+      'id, year_id, name, mobile, email, reg_id, user_id, banned, disqualified',
+    )
+    .eq('id', participantId)
+    .eq('year_id', yearId)
+    .maybeSingle();
+
+  if (participantError) {
+    throw new AppError(
+      'Failed to fetch participant',
+      ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!participantData) {
+    throw new AppError(
+      'Participant not found',
+      ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND,
+      404,
+    );
+  }
+
+  if (participantData.disqualified) {
+    throw new AppError(
+      'Participant is already disqualified',
+      ERROR_CODES.YEAR_PARTICIPANT_ALREADY_DISQUALIFIED,
+      400,
+    );
+  }
+
+  if (participantData.user_id) {
+    throw new AppError(
+      'Cannot disqualify a team lead.',
+      ERROR_CODES.FORBIDDEN,
+      403,
+    );
+  }
+
+  const { error: disqualifyParticipantError } = await db
+    .from('year_participants')
+    .update({ disqualified: true })
+    .eq('id', participantId)
+    .eq('year_id', yearId);
+
+  if (disqualifyParticipantError) {
+    throw new AppError(
+      'Failed to disqualify participant',
+      ERROR_CODES.YEAR_PARTICIPANT_DISQUALIFY_FAILED,
+      500,
+    );
+  }
+
+  return { ...participantData, disqualified: true };
+};
+
+export const undisqualifyParticipant = async ({
+  yearId,
+  participantId,
+}: {
+  yearId: string;
+  participantId: string;
+}) => {
+  const db = getSupabase();
+
+  const { data: yearData, error: yearError } = await db
+    .from('years')
+    .select('id, is_locked')
+    .eq('id', yearId)
+    .maybeSingle();
+
+  if (yearError) {
+    throw new AppError(
+      'Failed to fetch year',
+      ERROR_CODES.YEAR_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!yearData) {
+    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+  }
+
+  if (yearData.is_locked) {
+    throw new AppError(
+      'Year is locked. Cannot undisqualify participants.',
+      ERROR_CODES.YEAR_ALREADY_LOCKED,
+      409,
+    );
+  }
+
+  const { data: participantData, error: participantError } = await db
+    .from('year_participants')
+    .select(
+      'id, year_id, name, mobile, email, reg_id, user_id, banned, disqualified',
+    )
+    .eq('id', participantId)
+    .eq('year_id', yearId)
+    .maybeSingle();
+
+  if (participantError) {
+    throw new AppError(
+      'Failed to fetch participant',
+      ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!participantData) {
+    throw new AppError(
+      'Participant not found',
+      ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND,
+      404,
+    );
+  }
+
+  if (!participantData.disqualified) {
+    throw new AppError(
+      'Participant is not disqualified',
+      ERROR_CODES.YEAR_PARTICIPANT_NOT_DISQUALIFIED,
+      400,
+    );
+  }
+
+  const { error: undisqualifyParticipantError } = await db
+    .from('year_participants')
+    .update({ disqualified: false })
+    .eq('id', participantId)
+    .eq('year_id', yearId);
+
+  if (undisqualifyParticipantError) {
+    throw new AppError(
+      'Failed to undisqualify participant',
+      ERROR_CODES.YEAR_PARTICIPANT_UNDISQUALIFY_FAILED,
+      500,
+    );
+  }
+
+  return { ...participantData, disqualified: false };
 };

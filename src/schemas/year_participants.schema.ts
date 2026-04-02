@@ -44,3 +44,15 @@ export const getTeamParticipantsParamsSchema = zod.object({
   yearId: uuidSchema,
   teamId: uuidSchema,
 });
+
+export const yearParticipantsBanParamsSchema = zod.object({
+  participantId: uuidSchema,
+  yearId: uuidSchema,
+});
+
+export const yearParticipantsUnbanParamsSchema =
+  yearParticipantsBanParamsSchema;
+
+export const yearParticipantsUnbanQuerySchema = zod.object({
+  restoreAuth: zod.stringbool().optional(),
+});

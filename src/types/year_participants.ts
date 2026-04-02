@@ -27,3 +27,18 @@ export type YearParticipantFilters = {
   sort?: 'name' | 'email';
   order?: 'asc' | 'desc';
 };
+
+export interface ParticipantBanResult {
+  success: boolean;
+  account_disabled: boolean;
+  db_updated: boolean;
+  data: any | null; // The updated participant record
+}
+
+export interface ParticipantUnbanResult {
+  success: boolean;
+  auth_restored: boolean;
+  restoredCompleteAccess: boolean;
+  db_updated: boolean;
+  data: any | null;
+}
