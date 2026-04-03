@@ -65,7 +65,15 @@ export const createYear = async ({
     );
   }
 
-  return newYear;
+  const { data: previousYear } = await db
+    .from('years')
+    .select('id')
+    .neq('id', newYear.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return { createdYear: newYear, previousYearId: previousYear?.id ?? null };
 };
 
 export const lockYear = async (year: string) => {

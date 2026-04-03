@@ -889,3 +889,56 @@ export const undisqualifyParticipant = async ({
 
   return { ...participantData, disqualified: false };
 };
+
+export const getTeamLeadsForYear = async (yearId: string) => {
+  const db = getSupabase();
+
+  const { data: yearsData, error: yearsError } = await db
+    .from('years')
+    .select('id')
+    .eq('id', yearId)
+    .maybeSingle();
+
+  if (yearsError) {
+    throw new AppError(
+      'Failed to fetch year',
+      ERROR_CODES.YEAR_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!yearsData) {
+    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+  }
+
+  const { data: teamLeadsData, error: teamLeadsError } = await db
+    .from('year_participants')
+    .select(
+      'id, name, email, mobile, reg_id, user_id, banned, team_memberships(id, team_id, is_team_lead)',
+    )
+    .eq('year_id', yearsData.id)
+    .not('user_id', 'is', null);
+
+  if (teamLeadsError) {
+    throw new AppError(
+      'Failed to fetch team leads',
+      ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
+      500,
+    );
+  }
+
+  const teamLeads = teamLeadsData.map((item) => ({
+    id: item.id,
+    name: item.name,
+    email: item.email,
+    mobile: item.mobile,
+    reg_id: item.reg_id,
+    user_id: item.user_id,
+    banned: item.banned,
+    team_membership_id: item.team_memberships[0]?.id ?? null,
+    team_id: item.team_memberships[0]?.team_id ?? null,
+    is_team_lead: item.team_memberships[0]?.is_team_lead ?? false,
+  }));
+
+  return teamLeads;
+};

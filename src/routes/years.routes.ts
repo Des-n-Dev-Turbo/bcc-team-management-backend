@@ -1,8 +1,14 @@
 import { Hono } from 'hono';
 
 import { supabaseAuth, loadProfile, requireRole } from '@/middleware';
-import { createYear, getYears, lockYear } from '@/services';
+import {
+  createYear,
+  getYears,
+  lockYear,
+  getTeamLeadsForYear,
+} from '@/services';
 import { createYearSchema, lockYearSchema } from '@/schemas/years.schema.ts';
+import { yearParticipantsParamsSchema } from '@/schemas/year_participants.schema.ts';
 import yearsParticipantRouter from './year_participants.routes.ts';
 import teamParticipantsRouter from './team_participants.routes.ts';
 
@@ -47,6 +53,21 @@ router.get('/', supabaseAuth, loadProfile, async (c) => {
 
   return c.json(years, 200);
 });
+
+router.get(
+  '/:yearId/team-leads',
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate('param', yearParticipantsParamsSchema),
+  async (c) => {
+    const { yearId } = getValidated(c, 'param', yearParticipantsParamsSchema);
+
+    const result = await getTeamLeadsForYear(yearId);
+
+    return c.json(result, 200);
+  },
+);
 
 router.route('/:yearId/participants', yearsParticipantRouter);
 

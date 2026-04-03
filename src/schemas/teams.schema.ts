@@ -18,3 +18,7 @@ export const updateTeamNameParamsSchema = z.object({
 export const updateTeamNameSchema = z.object({
   name: nameSchema,
 });
+
+export const teamIdsParamsSchema = z.object({
+  teamIds: z.array(uuidSchema).min(1, 'At least one team ID must be provided'),
+});

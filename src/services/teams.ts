@@ -1,6 +1,7 @@
 import { getSupabase } from '@/lib';
 import { AppError } from '@/utils/error.ts';
 import { ERROR_CODES } from '@/constants/error-codes.ts';
+import { create } from 'node:domain';
 
 export const createTeam = async (teamName: string, yearId: string) => {
   const db = getSupabase();
@@ -166,4 +167,110 @@ export const updateTeamName = async (teamId: string, newName: string) => {
   }
 
   return updatedTeam;
+};
+
+export const copyTeamsToYear = async ({
+  yearId,
+  teamIds,
+}: {
+  yearId: string;
+  teamIds: string[];
+}) => {
+  const db = getSupabase();
+
+  const { data: yearData, error: yearError } = await db
+    .from('years')
+    .select('id, is_locked')
+    .eq('id', yearId)
+    .maybeSingle();
+
+  if (yearError) {
+    throw new AppError(
+      'Failed to fetch associated year',
+      ERROR_CODES.YEAR_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!yearData) {
+    throw new AppError(
+      'Associated year not found',
+      ERROR_CODES.YEAR_NOT_FOUND,
+      404,
+    );
+  }
+
+  if (yearData.is_locked) {
+    throw new AppError(
+      'Cannot create team for a locked year',
+      ERROR_CODES.YEAR_ALREADY_LOCKED,
+      409,
+    );
+  }
+
+  const { data: previousYearTeamsData, error: previousYearTeamsError } =
+    await db.from('teams').select('id, year_id, name').in('id', teamIds);
+
+  if (previousYearTeamsError) {
+    throw new AppError(
+      'Failed to fetch teams to copy',
+      ERROR_CODES.TEAMS_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!previousYearTeamsData || previousYearTeamsData.length === 0) {
+    throw new AppError(
+      'No teams found to copy',
+      ERROR_CODES.TEAM_NOT_FOUND,
+      404,
+    );
+  }
+
+  const { data: currentYearTeamsData, error: currentYearTeamsError } = await db
+    .from('teams')
+    .select('id, name')
+    .eq('year_id', yearId);
+
+  if (currentYearTeamsError) {
+    throw new AppError(
+      'Failed to fetch existing teams for the target year',
+      ERROR_CODES.TEAMS_FETCH_FAILED,
+      500,
+    );
+  }
+
+  const existingTeamNames = new Set(
+    currentYearTeamsData?.map((team) => team.name.toLowerCase()),
+  );
+
+  const teamsToInsert = previousYearTeamsData
+    .filter((team) => !existingTeamNames.has(team.name.toLowerCase()))
+    .map((team) => ({ name: team.name, year_id: yearId }));
+
+  const teamsToExclude = previousYearTeamsData
+    .filter((team) => existingTeamNames.has(team.name.toLowerCase()))
+    .map((team) => team.name);
+
+  if (teamsToInsert.length === 0) {
+    return { created: [], skipped: teamsToExclude };
+  }
+
+  const { data: insertedTeams, error: insertError } = await db
+    .from('teams')
+    .insert(teamsToInsert)
+    .select('id, name, year_id');
+
+  if (insertError) {
+    throw new AppError(
+      'Failed to copy teams',
+      ERROR_CODES.CREATE_TEAM_FAILED,
+      500,
+    );
+  }
+
+  return {
+    created: insertedTeams?.map((team) => team.name),
+    skipped: teamsToExclude,
+  };
 };

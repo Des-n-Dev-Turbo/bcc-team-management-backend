@@ -1,10 +1,16 @@
 import { Hono } from 'hono';
 
 import { supabaseAuth, loadProfile, requireRole } from '@/middleware';
-import { createTeam, getTeamsByYear, updateTeamName } from '@/services';
+import {
+  createTeam,
+  getTeamsByYear,
+  updateTeamName,
+  copyTeamsToYear,
+} from '@/services';
 import {
   createTeamSchema,
   getTeamsSchema,
+  teamIdsParamsSchema,
   updateTeamNameParamsSchema,
   updateTeamNameSchema,
 } from '@/schemas/teams.schema.ts';
@@ -58,6 +64,24 @@ router.patch(
 
     const updatedTeam = await updateTeamName(teamId, newName);
     return c.json(updatedTeam, 200);
+  },
+);
+
+router.post(
+  '/year/:yearId/copy',
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate('param', getTeamsSchema),
+  validate('json', teamIdsParamsSchema),
+  async (c) => {
+    const { yearId } = getValidated(c, 'param', getTeamsSchema);
+
+    const { teamIds } = getValidated(c, 'json', teamIdsParamsSchema);
+
+    const copiedTeams = await copyTeamsToYear({ yearId, teamIds });
+
+    return c.json(copiedTeams, 200);
   },
 );
 
