@@ -7,7 +7,7 @@ import {
   requireYearAccess,
 } from '@/middleware';
 
-import { getTeamYearParticipants } from '@/services/team_participants.ts';
+import { getTeamYearParticipants } from '@/services';
 import { validate, getValidated } from '@/utils/validate.ts';
 import { getTeamParticipantsParamsSchema } from '@/schemas/year_participants.schema.ts';
 

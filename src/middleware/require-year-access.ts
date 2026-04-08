@@ -23,7 +23,7 @@ export const requireYearAccess: MiddlewareHandler<AppContext> = async (
     return;
   }
 
-  const yearId = c.req.query('yearId');
+  const yearId = c.req.query('yearId') ?? c.req.param('yearId') ?? null;
 
   if (!yearId) {
     throw new AppError(
