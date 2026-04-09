@@ -142,9 +142,11 @@ viewer < user < admin < superadmin
 
 ### 4.6 Team Memberships
 
-- [ ] Assign participant to team — admin+ (any team) or team lead (own team only, unassigned participants only)
-- [ ] Remove participant from team (admin+)
-- [ ] Move regular participant to another team (admin+ only, requires UI confirmation modal, scores transfer to new team)
+- [x] Assign participant to team — admin+ (any team) or team lead (own team only, unassigned participants only)
+  - `POST /team-memberships?yearId=xxx`, body: `{ teamId, participantId }`, handles 23505 with 409
+- [x] Remove participant from team (admin+) — `DELETE /team-memberships/:membershipId?yearId=xxx`
+- [x] Move regular participant to another team (admin+ only) — `PATCH /team-memberships/transfer?yearId=xxx`
+  - Ghost Points: score_events NOT updated on transfer, team-specific task points don't count for new team
 - [ ] Move team lead to another team as regular member (admin+ only)
 - [ ] Move team lead to another team as new team lead (admin+ only) — blocked if target team already has a team lead; admin must remove existing lead first
 - [ ] Demote team lead to regular participant within same team (admin+) — is_team_lead set to false, stays in same team
@@ -372,11 +374,10 @@ viewer < user < admin < superadmin
 
 ## 9. What's Next (Immediate)
 
-1. Team memberships — assign participant to team
-2. Team memberships — move participant between teams (score transfer)
-3. Team memberships — demote team lead to regular member within same team
-4. Remove year access endpoint with cascade cleanup
-5. Role promotion/demotion dashboard endpoints
-6. Tasks and scoring
-7. Leaderboard
-8. Testing suite
+1. Team memberships — promote participant to team lead (admin+)
+2. Team memberships — demote team lead to regular member within same team (admin+)
+3. Remove year access endpoint with cascade cleanup
+4. Role promotion/demotion dashboard endpoints
+5. Tasks and scoring
+6. Leaderboard
+7. Testing suite

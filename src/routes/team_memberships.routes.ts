@@ -10,8 +10,16 @@ import { validate, getValidated } from '@/utils/validate.ts';
 import {
   addParticipantToTeamQuerySchema,
   addParticipantToTeamSchema,
+  removeParticipantFromTeamParamsSchema,
+  removeParticipantFromTeamQuerySchema,
+  transferParticipantToTeamSchema,
+  transferParticipantToTeamQuerySchema,
 } from '@/schemas/team_memberships.schema.ts';
-import { addParticipantToTeam } from '@/services';
+import {
+  addParticipantToTeam,
+  removeParticipantFromTeam,
+  transferParticipant,
+} from '@/services';
 
 const router = new Hono<AppContext>();
 
@@ -44,3 +52,62 @@ router.post(
     return c.json(result, 201);
   },
 );
+
+router.delete(
+  '/:membershipId',
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate('param', removeParticipantFromTeamParamsSchema),
+  validate('query', removeParticipantFromTeamQuerySchema),
+  async (c) => {
+    const { membershipId } = getValidated(
+      c,
+      'param',
+      removeParticipantFromTeamParamsSchema,
+    );
+
+    const { yearId } = getValidated(
+      c,
+      'query',
+      removeParticipantFromTeamQuerySchema,
+    );
+
+    const result = await removeParticipantFromTeam({ yearId, membershipId });
+
+    return c.json(result, 200);
+  },
+);
+
+router.patch(
+  '/transfer',
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate('json', transferParticipantToTeamSchema),
+  validate('query', transferParticipantToTeamQuerySchema),
+  async (c) => {
+    const { membershipId, teamId, toTeamId } = getValidated(
+      c,
+      'json',
+      transferParticipantToTeamSchema,
+    );
+
+    const { yearId } = getValidated(
+      c,
+      'query',
+      transferParticipantToTeamQuerySchema,
+    );
+
+    const result = await transferParticipant({
+      teamId,
+      toTeamId,
+      membershipId,
+      yearId,
+    });
+
+    return c.json(result, 200);
+  },
+);
+
+export default router;

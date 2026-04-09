@@ -141,6 +141,7 @@ viewer < user < admin < superadmin
 2. `loadProfile` — fetches profile from DB, sets global_role on context
 3. `requireRole(minRole)` — enforces minimum role
 4. `requireYearAccess` — checks year_access table for viewer/user roles (admin+ bypass)
+   - Reads `yearId` from query param OR URL param: `c.req.query('yearId') ?? c.req.param('yearId') ?? null`
 
 ---
 
@@ -297,6 +298,15 @@ Two modes controlled by optional `restoreAccess` query param:
 - Bonus can stack
 - Admin can edit base score only
 
+### Task Scoping & Ghost Points
+
+- Tasks are either **Global** (`team_id: null`, admin-created) or **Team-Specific** (`team_id: uuid`, team lead-created)
+- When a participant is transferred between teams, `score_events` are NOT updated — scores stay linked to original tasks
+- Points earned on Team A's specific tasks become **Ghost Points** when participant moves to Team B
+- Ghost Points remain in participant's total history but do NOT count toward Team B's leaderboard
+- Leaderboard must filter score_events by task validity for current team — global tasks always count, team-specific tasks only count if `task.team_id === current team_id`
+- This prevents gaming the system by moving high-scorers between teams
+
 ### Team Memberships
 
 - Team lead can only assign unassigned participants to their own team
@@ -401,6 +411,11 @@ Two modes controlled by optional `restoreAccess` query param:
 
 /teams (additional)
   POST /year/:yearId/copy                  — copy teams from previous year (admin+, body: { teamIds })
+
+/team-memberships
+  POST /?yearId=xxx                        — assign participant to team (user+, body: { teamId, participantId })
+  DELETE /:membershipId?yearId=xxx         — remove participant from team (admin+)
+  PATCH /transfer?yearId=xxx               — transfer participant to another team (admin+, body: { membershipId, teamId, toTeamId })
   PATCH /:yearId/participants/:id/ban      — ban participant (admin+)
   PATCH /:yearId/participants/:id/unban    — unban participant (admin+)
   PATCH /:yearId/participants/:id/disqualify   — disqualify participant (admin+)
@@ -587,6 +602,28 @@ See `src/constants/error-codes.ts` for full list. Key ones:
 - `GET /years/:yearId/team-leads` route built — admin+ only, reuses yearId param schema, returns all team leads including banned
 - `copyTeamsToYear` service built — validates year exists and not locked, fetches source teams by IDs, skips duplicates by name (case-insensitive), bulk inserts remaining, returns `{ created, skipped }`
 - `POST /teams/year/:yearId/copy` route built — admin+ only, body: `{ teamIds: uuid[] }` via `teamIdsParamsSchema`
+- `addParticipantToTeam` service built in `src/services/team_memberships.ts`
+  - Validates year exists and not locked
+  - Validates participant exists and belongs to year (excludes banned)
+  - Validates team exists and belongs to year
+  - Team lead restriction — if role is `user`, checks requester's team matches target team via `getRequesterTeam`
+  - Inserts `team_memberships` with `is_team_lead: false`, handles `23505` with 409
+- `POST /team-memberships?yearId=xxx` route built
+  - Middleware: `supabaseAuth` → `loadProfile` → `requireRole(Role.User)` → `requireYearAccess`
+  - `yearId` from query param (for `requireYearAccess`), `teamId` + `participantId` from body
+  - New schemas: `addParticipantToTeamSchema` (body), `addParticipantToTeamQuerySchema` (query)
+- `validateTeamParticipants` shared utility built in `src/utils/team_memberships.ts`
+  - Validates year exists and not locked
+  - Validates membership exists and belongs to yearId (joins year_participants and teams)
+  - Returns `{ currentTeamId, yearId, db }` for use in downstream services
+- `removeParticipantFromTeam` service built — calls `validateTeamParticipants`, deletes membership, returns deleted record
+- `DELETE /team-memberships/:membershipId?yearId=xxx` route built — admin+ only
+- `transferParticipant` service built
+  - Calls `validateTeamParticipants`, validates current teamId matches, validates target team exists in same year
+  - Updates `team_id` and sets `is_team_lead: false` on membership
+  - Returns `{ name: toTeamName, teamId: newTeamId }`
+  - Ghost Points decision: historical score_events NOT updated on transfer — points earned on team-specific tasks become ghost points, not counted toward new team's leaderboard
+- `PATCH /team-memberships/transfer?yearId=xxx` route built — admin+ only, all params in body: `{ membershipId, teamId, toTeamId }`
 - `teamIdsParamsSchema` added to teams schema file — `z.array(uuidSchema).min(1)`
 - `createYear` updated — returns `{ createdYear, previousYearId }` where `previousYearId` is most recent other year
 
@@ -751,19 +788,25 @@ See `src/constants/error-codes.ts` for full list. Key ones:
 
 ## 14. What's Next (in order)
 
-1. Team memberships — assign participant to team (admin+ any team, team lead own team only)
-2. Team memberships — move participant between teams (score transfer)
-3. Team memberships — demote team lead to regular member within same team
-4. Remove year access endpoint with cascade cleanup
-5. Role promotion/demotion dashboard endpoints
-6. Tasks and scoring (including `GET /years/:yearId/teams/:teamId/scores`)
-7. Leaderboard
-8. Testing suite
-9. Team memberships — assign participant to team
-10. Team memberships — move participant between teams (score transfer)
-11. Team memberships — demote team lead to regular member within same team
-12. Remove year access endpoint with cascade cleanup
-13. Role promotion/demotion dashboard endpoints
-14. Tasks and scoring (including `GET /years/:yearId/teams/:teamId/scores`)
-15. Leaderboard
-16. Testing suite
+1. Team memberships — promote participant to team lead (admin+)
+2. Team memberships — demote team lead to regular member within same team (admin+)
+3. Remove year access endpoint with cascade cleanup
+4. Role promotion/demotion dashboard endpoints
+5. Tasks and scoring
+6. Leaderboard
+7. Testing suite
+8. Team memberships — move participant between teams (score transfer)
+9. Team memberships — demote team lead to regular member within same team
+10. Remove year access endpoint with cascade cleanup
+11. Role promotion/demotion dashboard endpoints
+12. Tasks and scoring (including `GET /years/:yearId/teams/:teamId/scores`)
+13. Leaderboard
+14. Testing suite
+15. Team memberships — assign participant to team
+16. Team memberships — move participant between teams (score transfer)
+17. Team memberships — demote team lead to regular member within same team
+18. Remove year access endpoint with cascade cleanup
+19. Role promotion/demotion dashboard endpoints
+20. Tasks and scoring (including `GET /years/:yearId/teams/:teamId/scores`)
+21. Leaderboard
+22. Testing suite

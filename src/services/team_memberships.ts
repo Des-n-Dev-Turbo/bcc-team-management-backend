@@ -4,6 +4,7 @@ import { AppError } from '@/utils/error.ts';
 import { ERROR_CODES } from '@/constants/error-codes.ts';
 import { getRequesterTeam } from '@/utils/participants.ts';
 import { Role } from '@/types';
+import { validateTeamParticipants } from '@/utils/team_memberships.ts';
 
 export const addParticipantToTeam = async ({
   yearId,
@@ -44,7 +45,7 @@ export const addParticipantToTeam = async ({
 
   if (yearData.is_locked) {
     throw new AppError(
-      'Cannot create team for a locked year',
+      'Cannot add team member for a locked year',
       ERROR_CODES.YEAR_ALREADY_LOCKED,
       409,
     );
@@ -135,4 +136,100 @@ export const addParticipantToTeam = async ({
   }
 
   return teamMembershipData;
+};
+
+export const removeParticipantFromTeam = async ({
+  yearId,
+  membershipId,
+}: {
+  yearId: string;
+  membershipId: string;
+}) => {
+  const { db } = await validateTeamParticipants({ yearId, membershipId });
+
+  const { data: deletedData, error: deleteError } = await db
+    .from('team_memberships')
+    .delete()
+    .eq('id', membershipId)
+    .select()
+    .single();
+
+  if (deleteError) {
+    throw new AppError(
+      'Failed to remove participant from team',
+      ERROR_CODES.TEAM_MEMBERSHIP_DELETE_FAILED,
+      500,
+    );
+  }
+
+  return deletedData;
+};
+
+export const transferParticipant = async ({
+  teamId,
+  toTeamId,
+  membershipId,
+  yearId,
+}: {
+  teamId: string;
+  toTeamId: string;
+  membershipId: string;
+  yearId: string;
+}) => {
+  const {
+    db,
+    currentTeamId,
+    yearId: currentYearId,
+  } = await validateTeamParticipants({
+    yearId,
+    membershipId,
+  });
+
+  if (currentTeamId !== teamId) {
+    throw new AppError(
+      'Incorrect Participant Team Id given',
+      ERROR_CODES.INVALID_REQUEST,
+      400,
+    );
+  }
+
+  const { data: toTeamData, error: toTeamError } = await db
+    .from('teams')
+    .select('id, name, year_id')
+    .eq('id', toTeamId)
+    .eq('year_id', currentYearId)
+    .maybeSingle();
+
+  if (toTeamError) {
+    throw new AppError(
+      'Team fetch failed',
+      ERROR_CODES.TEAMS_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!toTeamData) {
+    throw new AppError(
+      'The team you are trying to transfer the participant to does not exist',
+      ERROR_CODES.TEAM_FETCH_FAILED,
+      404,
+    );
+  }
+
+  const { data: updatedData, error: updatedError } = await db
+    .from('team_memberships')
+    .update({ team_id: toTeamData.id, is_team_lead: false })
+    .eq('id', membershipId)
+    .select('id, team_id')
+    .single();
+
+  if (updatedError) {
+    throw new AppError(
+      'Failed to transfer participant from team',
+      ERROR_CODES.TEAM_MEMBERSHIP_TRANSFER_FAILED,
+      500,
+    );
+  }
+
+  return { name: toTeamData.name, teamId: updatedData.team_id };
 };

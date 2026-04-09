@@ -4,6 +4,7 @@ import profileRoutes from '@/routes/profile.routes.ts';
 import teamRoutes from '@/routes/teams.routes.ts';
 import yearRoutes from '@/routes/years.routes.ts';
 import yearAccessRouter from '@/routes/year_access.routes.ts';
+import teamMembershipsRouter from '@/routes/team_memberships.routes.ts';
 
 import { AppError, getErrorMessage } from '@/utils/error.ts';
 import { ERROR_CODES } from '@/constants/error-codes.ts';
@@ -19,6 +20,8 @@ app.route('/teams', teamRoutes);
 app.route('/years', yearRoutes);
 
 app.route('/year-access', yearAccessRouter);
+
+app.route('/team_memberships', teamMembershipsRouter);
 
 app.onError((error, c) => {
   console.log(getErrorMessage(error));
