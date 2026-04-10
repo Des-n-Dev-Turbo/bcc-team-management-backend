@@ -95,11 +95,11 @@ viewer < user < admin < superadmin
 
 - [x] Add single participant to a year (admin+)
 - [x] Bulk add participants via CSV (admin+)
-- [ ] Get all volunteers for a year — paginated, 50/page, default sort name asc, with filtering and sorting (any with year access)
+- [x] Get all volunteers for a year — paginated, 50/page, default sort name asc, with filtering and sorting (any with year access)
 - [x] Get all volunteers for a specific team — non-paginated, sorted by name, privacy masked (any with year access)
   - Scores excluded — served via separate endpoint when scoring is built (Option B decision)
-- [ ] Privacy masking — email/mobile redacted based on role and team assignment
-- [ ] Shared utility functions — `getRequesterTeam`, `applyPrivacyMask`
+- [x] Privacy masking — email/mobile redacted based on role and team assignment
+- [x] Shared utility functions — `getRequesterTeam`, `applyPrivacyMask`
 - [ ] Get single participant details
 - [x] Ban participant (admin+) — excluded from all volunteer listings
   - Regular volunteer: `banned=true`, delete team_membership, soft delete score_events (`is_deleted=true`)
@@ -133,12 +133,11 @@ viewer < user < admin < superadmin
 | mobile | Admin+ only                   | —       | ilike contains, silently ignored for viewer/user |
 
 - Filter method: `.ilike('field', '%value%')` — contains, case-insensitive — for all filter fields
-- Restricted params (email sort, email filter, mobile filter) are **silently ignored** for viewer/user — not rejected with 403
-- API enforces restrictions independently; frontend disabling UI elements is UX only, not security
+- Restricted params silently ignored for viewer/user — not rejected with 403
 - Banned participants excluded from results in both views
 - Disqualified participants included in results in both views
 
-**Team view** — no pagination, all records loaded at once. Sorting and filtering handled entirely client-side by TanStack Table. No additional API params needed.
+**Team view** — no pagination, sorting and filtering handled client-side by TanStack Table.
 
 ### 4.6 Team Memberships
 
@@ -147,10 +146,14 @@ viewer < user < admin < superadmin
 - [x] Remove participant from team (admin+) — `DELETE /team-memberships/:membershipId?yearId=xxx`
 - [x] Move regular participant to another team (admin+ only) — `PATCH /team-memberships/transfer?yearId=xxx`
   - Ghost Points: score_events NOT updated on transfer, team-specific task points don't count for new team
-- [ ] Move team lead to another team as regular member (admin+ only)
-- [ ] Move team lead to another team as new team lead (admin+ only) — blocked if target team already has a team lead; admin must remove existing lead first
-- [ ] Demote team lead to regular participant within same team (admin+) — is_team_lead set to false, stays in same team
-- [ ] Get participants for a specific team
+- [ ] Promote participant to team lead — `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
+  - 7 preconditions enforced via `getPromotionContext` + pure validators
+  - `getPromotionContext` built in `src/utils/team_memberships.ts` ✅
+  - Pure validator functions — next to implement
+  - Frontend-orchestrated swap on `TEAM_LEAD_ALREADY_EXISTS` — no backend auto-demotion
+  - `TEAM_LEAD_ALREADY_EXISTS` response includes `{ currentLead: { id, name }, canReplace: true }`
+- [ ] Demote team lead to regular member — `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
+  - Sets `is_team_lead = false`, stays in same team, role unchanged
 
 #### Team Lead Demotion Rules
 
@@ -160,12 +163,11 @@ viewer < user < admin < superadmin
 - **Full demotion (global role → viewer)** — team_membership and year_participant removed for current year
 - In all move scenarios, global_role stays as `user`. Admin manually awards one-time bonus for prior contribution.
 
-### 4.7 Team Lead Promotion
+### 4.7 Team Lead Promotion (Global Role — via /roles dashboard)
 
 - [ ] Handled via /roles promotion dashboard — global role change only
 - [ ] year_participant created for most recent year if approved year_access exists at promotion time
 - [ ] Team assignment is a separate explicit step — creates team_membership with is_team_lead = true
-- [ ] Atomic only at team assignment step — role update and year_participant creation are independent
 
 ### 4.8 Tasks & Scoring
 
@@ -187,9 +189,9 @@ viewer < user < admin < superadmin
 
 ### 4.10 Privacy
 
-- [ ] email and mobile masked for non-admin, non-self, non-team-lead
-- [ ] Applied in service layer before response is sent
-- [ ] Team lead can see own team's full contact info only
+- [x] email and mobile masked for non-admin, non-self, non-team-lead
+- [x] Applied in service layer before response is sent
+- [x] Team lead can see own team's full contact info only
 
 ### 4.11 Audit Logging
 
@@ -214,10 +216,10 @@ viewer < user < admin < superadmin
 ## 5. Implementation Plan
 
 ### Phase 1 — Core Infrastructure ✅ DONE
+
 - Biome linting/formatting configured
 - Git pre-commit hooks set up
 - Table enum and route constants centralised
-
 - Auth middleware (supabaseAuth, loadProfile, requireRole)
 - Error handling (AppError, global handler, error codes)
 - Zod validation pattern (validate middleware, getValidated helper)
@@ -226,26 +228,28 @@ viewer < user < admin < superadmin
 - Team CRUD
 - Year access request flow
 
-### Phase 2 — Participant Management 🔄 IN PROGRESS
+### Phase 2 — Participant Management ✅ DONE
 
 - [x] Single participant add
 - [x] Bulk CSV upload
 - [x] Participant listing design — filtering, sorting, role enforcement, filter method decisions
 - [x] Zod schemas — `getYearParticipantsQuerySchema`, `getTeamParticipantsParamsSchema`
 - [x] Shared utilities — `getRequesterTeam`, `applyPrivacyMask` in `src/utils/participants.ts`
-- [x] Get year volunteers — paginated, DB-level filtering/sorting, privacy masked (`getYearParticipants` + route)
+- [x] Get year volunteers — paginated, DB-level filtering/sorting, privacy masked
 - [x] Get team volunteers — non-paginated, privacy masked, inner join on team_memberships, limit 50
 - [x] Ban/Unban — complete with Pardon vs Reinstatement pattern, RPC functions, partial success handling
 - [x] Disqualify/Undisqualify
 
-### Phase 3 — Team Memberships & Promotion
+### Phase 3 — Team Memberships & Promotion 🔄 IN PROGRESS
 
-- Assign participant to team (admin+ any team, team lead own team only)
-- Move participant between teams (admin+ only, score transfer)
-- Team lead demotion flow when moved — loses lead status, retains role, manual bonus compensation
-- Team lead promotion flow (atomic: role update + year_participant + team_membership)
-- Remove participant from team (admin+)
-- Get team participants
+- [x] Assign participant to team (admin+ any team, team lead own team only)
+- [x] Remove participant from team (admin+)
+- [x] Move participant between teams (admin+ only, ghost points decision locked)
+- [x] New error codes — `TEAM_LEAD_ALREADY_EXISTS`, `USER_NOT_REGISTERED`, `YEAR_ACCESS_NOT_APPROVED`, `NOT_A_TEAM_LEAD`
+- [x] `getPromotionContext` utility in `src/utils/team_memberships.ts`
+- [ ] Pure validator functions in `src/utils/team_memberships.ts`
+- [ ] `promoteToTeamLead` service + `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
+- [ ] `demoteTeamLead` service + `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
 
 ### Phase 4 — Tasks & Scoring
 
@@ -260,10 +264,11 @@ viewer < user < admin < superadmin
 - Year leaderboard (top 2 per team)
 - Exclusion logic (disqualified, staff roles)
 
-### Phase 6 — Privacy Layer
+### Phase 6 — Role Promotion/Demotion Dashboard
 
-- Apply masking to all participant endpoints
-- Test privacy rules per role
+- Remove year access endpoint with cascade cleanup
+- List all users with global_role
+- Promote/demote global role endpoints
 
 ### Phase 7 — Notifications
 
@@ -310,6 +315,8 @@ viewer < user < admin < superadmin
 | score_events on ban                    | Soft delete (`is_deleted = true`)                                         | Preserves audit trail; reversible on unban                                                                                      |
 | Ban scope                              | Single year_participant record only                                       | Registration check against most recent record enforces permanent ban system-wide                                                |
 | Team lead ban — year_access cleanup    | Delete current year only                                                  | Historical year_access records preserved; only active year access removed                                                       |
+| Promotion swap                         | Frontend-orchestrated — demote then promote as two separate calls         | No backend auto-demotion; safe failure state is 0 leads; avoids ghost authority                                                 |
+| Team lead promotion error code         | `TEAM_LEAD_ALREADY_EXISTS` (chosen over `TEAM_LEAD_EXISTS`)               | More descriptive; frontend not yet built so no contract to break                                                                |
 
 ---
 
@@ -321,40 +328,43 @@ viewer < user < admin < superadmin
   GET   /me                                 — get own profile
 
 /years
-  POST  /                                   — create year (superadmin) — blocked if any unlocked year exists
+  POST  /                                   — create year (superadmin)
   GET   /                                   — list years with access status
   POST  /:yearId/lock                       — lock year (admin+)
   POST  /:yearId/participants               — add participant (admin+)
   POST  /:yearId/participants/bulk          — bulk CSV upload (admin+)
-  GET   /:yearId/participants               — paginated volunteer list, DB-level filter/sort (any with year access)
-  GET   /:yearId/teams/:teamId/participants — team volunteer list, no pagination (any with year access)
-  PATCH /:yearId/participants/:id/ban          — ban participant (admin+)
-  PATCH /:yearId/participants/:id/unban        — unban participant (admin+)
-  PATCH /:yearId/participants/:id/disqualify   — disqualify participant (admin+)
-  PATCH /:yearId/participants/:id/undisqualify — undisqualify participant (admin+)
+  GET   /:yearId/participants               — paginated volunteer list (any with year access)
+  GET   /:yearId/teams/:teamId/participants — team volunteer list (any with year access)
+  GET   /:yearId/team-leads                 — all team leads incl. banned (admin+)
+  PATCH /:yearId/participants/:id/ban
+  PATCH /:yearId/participants/:id/unban
+  PATCH /:yearId/participants/:id/disqualify
+  PATCH /:yearId/participants/:id/undisqualify
 
 /teams
   POST  /create                             — create team (admin+)
   GET   /                                   — list teams for year
   PATCH /:teamId                            — update team name (admin+)
+  POST  /year/:yearId/copy                  — copy teams from previous year (admin+)
 
 /team-memberships
-  POST  /                                   — assign participant to team
-  PATCH /:id/move                           — move participant to another team (admin+)
-  PATCH /:id/demote                         — demote team lead to regular member within same team (admin+)
-  DELETE /:id                               — remove from team (admin+)
+  POST  /?yearId=xxx                        — assign participant to team (user+)
+  DELETE /:membershipId?yearId=xxx          — remove from team (admin+)
+  PATCH /transfer?yearId=xxx                — move participant to another team (admin+)
+  PATCH /:membershipId/promote?yearId=xxx   — promote to team lead (admin+) — PLANNED
+  PATCH /:membershipId/demote?yearId=xxx    — demote to regular member (admin+) — PLANNED
 
 /year-access
   POST  /                                   — request year access
   GET   /                                   — view all requests (admin+)
   PATCH /:id/approve                        — approve request (admin+)
   PATCH /:id/reject                         — reject request (admin+)
-  DELETE /:id                               — remove year access + cleanup team_membership + year_participant (admin+)
+  DELETE /:id                               — remove year access + cleanup (admin+) — PLANNED
 
-/roles                                      — promotion/demotion dashboard (outside year context)
+/roles                                      — PLANNED
   GET   /users                              — list all users with global_role (admin+)
-  PATCH /:userId/promote                    — promote user role (admin up to admin, superadmin up to superadmin)
-  PATCH /:userId/demote                     — demote user role (same permission rules)
+  PATCH /:userId/promote                    — promote user role
+  PATCH /:userId/demote                     — demote user role
 
 /tasks                                      — PLANNED
 /scores                                     — PLANNED
@@ -377,10 +387,15 @@ viewer < user < admin < superadmin
 
 ## 9. What's Next (Immediate)
 
-1. Team memberships — promote participant to team lead (admin+)
-2. Team memberships — demote team lead to regular member within same team (admin+)
-3. Remove year access endpoint with cascade cleanup
-4. Role promotion/demotion dashboard endpoints
-5. Tasks and scoring
-6. Leaderboard
-7. Testing suite
+1. Pure validator functions in `src/utils/team_memberships.ts`:
+   - `validateParticipantForPromotion(ctx)` — checks exists, not banned, has user_id
+   - `validateYearAccess(ctx)` — checks approved year_access
+   - `validateTeamMembership(ctx)` — checks participant is in teamId
+   - `validateTeamLeadConstraint(ctx)` — checks no lead already exists
+2. `promoteToTeamLead` service + `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
+3. `demoteTeamLead` service + `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
+4. Remove year access endpoint with cascade cleanup
+5. Role promotion/demotion dashboard endpoints
+6. Tasks and scoring
+7. Leaderboard
+8. Testing suite
