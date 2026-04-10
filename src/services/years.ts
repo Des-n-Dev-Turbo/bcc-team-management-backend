@@ -1,10 +1,9 @@
-import { getSupabase } from '@/lib/supabase.ts';
-import { AppError } from '@/utils/error.ts';
+import { MAX_YEAR_REQUEST_ATTEMPTS } from "@/constants/common.ts";
+import { ERROR_CODES } from "@/constants/error-codes.ts";
+import { getSupabase } from "@/lib/supabase.ts";
 
-import { ERROR_CODES } from '@/constants/error-codes.ts';
-
-import { hasRequiredRole, Role, YearAccessStatus } from '@/types';
-import { MAX_YEAR_REQUEST_ATTEMPTS } from '@/constants/common.ts';
+import { hasRequiredRole, Role, YearAccessStatus } from "@/types";
+import { AppError } from "@/utils/error.ts";
 
 export const createYear = async ({
   name,
@@ -16,21 +15,21 @@ export const createYear = async ({
   const db = getSupabase();
 
   const { data: fetchUnlockedYears, error: fetchUnlockedYearsError } = await db
-    .from('years')
-    .select('id, name, year')
-    .or('is_locked.eq.false,is_locked.is.null');
+    .from("years")
+    .select("id, name, year")
+    .or("is_locked.eq.false,is_locked.is.null");
 
   if (fetchUnlockedYearsError) {
     throw new AppError(
-      'Unable to access the Years',
+      "Unable to access the Years",
       ERROR_CODES.YEAR_FETCH_FAILED,
       500,
     );
   }
 
-  if (fetchUnlockedYears && fetchUnlockedYears.length) {
+  if (fetchUnlockedYears?.length) {
     throw new AppError(
-      'Cannot create a new year while unlocked years exist',
+      "Cannot create a new year while unlocked years exist",
       ERROR_CODES.YEAR_CREATION_BLOCKED,
       409,
       {
@@ -40,36 +39,36 @@ export const createYear = async ({
   }
 
   const { data: newYear, error: insertError } = await db
-    .from('years')
+    .from("years")
     .insert({
       name,
       year,
       is_locked: false,
     })
-    .select('id, name, year, is_locked')
+    .select("id, name, year, is_locked")
     .single();
 
   if (insertError) {
-    if (insertError.code === '23505') {
+    if (insertError.code === "23505") {
       throw new AppError(
-        'Year already exists',
+        "Year already exists",
         ERROR_CODES.DUPLICATE_YEAR,
         409,
       );
     }
 
     throw new AppError(
-      'Failed to create year',
+      "Failed to create year",
       ERROR_CODES.CREATE_YEAR_FAILED,
       500,
     );
   }
 
   const { data: previousYear } = await db
-    .from('years')
-    .select('id')
-    .neq('id', newYear.id)
-    .order('created_at', { ascending: false })
+    .from("years")
+    .select("id")
+    .neq("id", newYear.id)
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
@@ -80,41 +79,41 @@ export const lockYear = async (year: string) => {
   const db = getSupabase();
 
   const { data: fetchYear, error: fetchError } = await db
-    .from('years')
-    .select('id, is_locked')
-    .eq('id', year)
+    .from("years")
+    .select("id, is_locked")
+    .eq("id", year)
     .maybeSingle();
 
   if (fetchError) {
     throw new AppError(
-      'Failed to fetch year',
+      "Failed to fetch year",
       ERROR_CODES.YEAR_FETCH_FAILED,
       500,
     );
   }
 
   if (!fetchYear) {
-    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
   }
 
   if (fetchYear.is_locked) {
     throw new AppError(
-      'Year is already locked',
+      "Year is already locked",
       ERROR_CODES.YEAR_ALREADY_LOCKED,
       409,
     );
   }
 
   const { data: lockedYear, error: lockedYearError } = await db
-    .from('years')
+    .from("years")
     .update({ is_locked: true })
-    .eq('id', year)
-    .select('id, is_locked, name, year')
+    .eq("id", year)
+    .select("id, is_locked, name, year")
     .single();
 
   if (lockedYearError) {
     throw new AppError(
-      'Failed to lock year',
+      "Failed to lock year",
       ERROR_CODES.LOCK_YEAR_FAILED,
       500,
     );
@@ -133,12 +132,12 @@ export const getYears = async ({
   const db = getSupabase();
 
   const { data: years, error: yearsError } = await db
-    .from('years')
-    .select('id, name, year, is_locked');
+    .from("years")
+    .select("id, name, year, is_locked");
 
   if (yearsError) {
     throw new AppError(
-      'Failed to fetch years',
+      "Failed to fetch years",
       ERROR_CODES.YEAR_FETCH_FAILED,
       500,
     );
@@ -157,14 +156,14 @@ export const getYears = async ({
   }
 
   const { data: yearAccessData, error: yearAccessError } = await db
-    .from('year_access')
+    .from("year_access")
     .select()
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
 
   if (yearAccessError) {
     throw new AppError(
-      'Failed to fetch year access data',
+      "Failed to fetch year access data",
       ERROR_CODES.YEAR_ACCESS_FETCH_FAILED,
       500,
     );

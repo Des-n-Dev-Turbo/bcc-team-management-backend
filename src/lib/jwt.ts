@@ -1,5 +1,5 @@
-import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { getConfig } from '@/config.ts';
+import { createRemoteJWKSet, jwtVerify } from "jose";
+import { getConfig } from "@/config.ts";
 
 const config = getConfig();
 
@@ -9,9 +9,9 @@ const JWKS = createRemoteJWKSet(
 
 export async function verifySupabaseJWT(token: string) {
   const { payload } = await jwtVerify(token, JWKS, {
-    algorithms: ['ES256'],
+    algorithms: ["ES256"],
     issuer: `${config.SUPABASE_URL}/auth/v1`,
-    audience: 'authenticated',
+    audience: "authenticated",
   });
 
   return payload;

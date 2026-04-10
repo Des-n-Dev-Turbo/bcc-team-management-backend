@@ -1,6 +1,6 @@
-import * as zod from '@zod/zod';
+import * as zod from "@zod/zod";
 
-import { uuidSchema } from './common.schema.ts';
+import { uuidSchema } from "./common.schema.ts";
 
 export const requestYearAccessSchema = zod.object({
   yearId: uuidSchema,

@@ -1,27 +1,24 @@
-import { Hono } from 'hono';
-
-import profileRoutes from '@/routes/profile.routes.ts';
-import teamRoutes from '@/routes/teams.routes.ts';
-import yearRoutes from '@/routes/years.routes.ts';
-import yearAccessRouter from '@/routes/year_access.routes.ts';
-import teamMembershipsRouter from '@/routes/team_memberships.routes.ts';
-
-import { AppError, getErrorMessage } from '@/utils/error.ts';
-import { ERROR_CODES } from '@/constants/error-codes.ts';
-
-import type { AppContext } from '@/types';
+import { Hono } from "hono";
+import { ERROR_CODES } from "@/constants/error-codes.ts";
+import profileRoutes from "@/routes/profile.routes.ts";
+import teamMembershipsRouter from "@/routes/team_memberships.routes.ts";
+import teamRoutes from "@/routes/teams.routes.ts";
+import yearAccessRouter from "@/routes/year_access.routes.ts";
+import yearRoutes from "@/routes/years.routes.ts";
+import type { AppContext } from "@/types";
+import { AppError, getErrorMessage } from "@/utils/error.ts";
 
 const app = new Hono<AppContext>();
 
-app.route('/profile', profileRoutes);
+app.route("/profile", profileRoutes);
 
-app.route('/teams', teamRoutes);
+app.route("/teams", teamRoutes);
 
-app.route('/years', yearRoutes);
+app.route("/years", yearRoutes);
 
-app.route('/year-access', yearAccessRouter);
+app.route("/year-access", yearAccessRouter);
 
-app.route('/team_memberships', teamMembershipsRouter);
+app.route("/team_memberships", teamMembershipsRouter);
 
 app.onError((error, c) => {
   console.log(getErrorMessage(error));
@@ -39,7 +36,7 @@ app.onError((error, c) => {
 
   return c.json(
     {
-      error: 'Internal Server Error',
+      error: "Internal Server Error",
       error_code: ERROR_CODES.INTERNAL_SERVER_ERROR,
     },
     500,

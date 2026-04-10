@@ -1,4 +1,4 @@
-import { getConfig } from '@/config.ts';
+import { getConfig } from "@/config.ts";
 
 type SendMailParams = {
   to: string;
@@ -12,12 +12,12 @@ export async function sendMail(payload: SendMailParams) {
   const config = getConfig();
 
   try {
-    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
       headers: {
-        accept: 'application/json',
-        'content-type': 'application/json',
-        'api-key': config.BREVO_API_KEY,
+        accept: "application/json",
+        "content-type": "application/json",
+        "api-key": config.BREVO_API_KEY,
       },
       body: JSON.stringify({
         sender: {
@@ -40,7 +40,7 @@ export async function sendMail(payload: SendMailParams) {
 
     return res.json();
   } catch (error) {
-    console.error('❌ Email sending error:', error);
+    console.error("❌ Email sending error:", error);
     throw error;
   }
 }

@@ -1,5 +1,5 @@
-import { ErrorCode } from '../constants/error-codes.ts';
-import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import type { ContentfulStatusCode } from "hono/utils/http-status";
+import type { ErrorCode } from "../constants/error-codes.ts";
 
 export class AppError extends Error {
   code: ErrorCode;
@@ -25,10 +25,10 @@ type ErrorWithMessage = {
 
 const isErrorWithMessage = (error: unknown): error is ErrorWithMessage => {
   return (
-    typeof error === 'object' &&
+    typeof error === "object" &&
     error !== null &&
-    'message' in error &&
-    typeof (error as Record<string, unknown>).message === 'string'
+    "message" in error &&
+    typeof (error as Record<string, unknown>).message === "string"
   );
 };
 

@@ -1,26 +1,25 @@
-import * as zod from '@zod/zod';
-import { getSupabase } from '@/lib';
-import { AppError } from '@/utils/error.ts';
-import { yearParticipantsSchema } from '@/schemas/year_participants.schema.ts';
+import type * as zod from "@zod/zod";
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from "@/constants/common.ts";
+import { ERROR_CODES } from "@/constants/error-codes.ts";
+import { getSupabase } from "@/lib";
+import { yearParticipantsSchema } from "@/schemas/year_participants.schema.ts";
 import {
-  applyPrivacyMask,
-  getRequesterTeam,
-  banTeamLead,
-  banVolunteer,
-} from '@/utils/participants.ts';
-
-import { ERROR_CODES } from '@/constants/error-codes.ts';
-import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '@/constants/common.ts';
-import {
-  type BulkSucceededRow,
-  type BulkFailedRow,
   type BulkAddResult,
-  type YearParticipantFilters,
-  Role,
+  type BulkFailedRow,
+  type BulkSucceededRow,
   hasRequiredRole,
   type ParticipantBanResult,
-  ParticipantUnbanResult,
-} from '@/types';
+  type ParticipantUnbanResult,
+  Role,
+  type YearParticipantFilters,
+} from "@/types";
+import { AppError } from "@/utils/error.ts";
+import {
+  applyPrivacyMask,
+  banTeamLead,
+  banVolunteer,
+  getRequesterTeam,
+} from "@/utils/participants.ts";
 
 export const addYearParticipant = async ({
   yearId,
@@ -40,26 +39,26 @@ export const addYearParticipant = async ({
   const db = getSupabase();
 
   const { data: fetchYear, error: fetchYearError } = await db
-    .from('years')
+    .from("years")
     .select()
-    .eq('id', yearId)
+    .eq("id", yearId)
     .maybeSingle();
 
   if (fetchYearError) {
     throw new AppError(
-      'Failed to fetch year',
+      "Failed to fetch year",
       ERROR_CODES.YEAR_FETCH_FAILED,
       500,
     );
   }
 
   if (!fetchYear) {
-    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
   }
 
   if (fetchYear.is_locked) {
     throw new AppError(
-      'Year is locked. Cannot add participants.',
+      "Year is locked. Cannot add participants.",
       ERROR_CODES.YEAR_ALREADY_LOCKED,
       409,
     );
@@ -69,15 +68,15 @@ export const addYearParticipant = async ({
 
   const { data: existingParticipant, error: existingParticipantError } =
     await db
-      .from('year_participants')
-      .select('id, year_id, name, email, banned, disqualified')
-      .eq('email', email)
-      .order('created_at', { ascending: false })
+      .from("year_participants")
+      .select("id, year_id, name, email, banned, disqualified")
+      .eq("email", email)
+      .order("created_at", { ascending: false })
       .limit(1);
 
   if (existingParticipantError) {
     throw new AppError(
-      'Failed to check existing participants',
+      "Failed to check existing participants",
       ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
       500,
     );
@@ -90,7 +89,7 @@ export const addYearParticipant = async ({
       const bannedParticipant = existingParticipant[0];
 
       throw new AppError(
-        'A participant with this email was previously banned.',
+        "A participant with this email was previously banned.",
         ERROR_CODES.PARTICIPANT_BANNED,
         403,
         {
@@ -110,7 +109,7 @@ export const addYearParticipant = async ({
   }
 
   const { data: insertedParticipant, error: insertError } = await db
-    .from('year_participants')
+    .from("year_participants")
     .insert({
       year_id: yearId,
       ...(userId ? { user_id: userId } : {}),
@@ -125,16 +124,16 @@ export const addYearParticipant = async ({
     .single();
 
   if (insertError) {
-    if (insertError.code === '23505') {
+    if (insertError.code === "23505") {
       throw new AppError(
-        'Participant with the same email already exists for this year',
+        "Participant with the same email already exists for this year",
         ERROR_CODES.YEAR_PARTICIPANT_ALREADY_EXISTS,
         409,
       );
     }
 
     throw new AppError(
-      'Failed to add participant to the year',
+      "Failed to add participant to the year",
       ERROR_CODES.YEAR_PARTICIPANT_CREATION_FAILED,
       500,
     );
@@ -153,26 +152,26 @@ export const bulkAddYearParticipants = async ({
   const db = getSupabase();
 
   const { data: fetchYear, error: fetchYearError } = await db
-    .from('years')
+    .from("years")
     .select()
-    .eq('id', yearId)
+    .eq("id", yearId)
     .maybeSingle();
 
   if (fetchYearError) {
     throw new AppError(
-      'Failed to fetch year',
+      "Failed to fetch year",
       ERROR_CODES.YEAR_FETCH_FAILED,
       500,
     );
   }
 
   if (!fetchYear) {
-    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
   }
 
   if (fetchYear.is_locked) {
     throw new AppError(
-      'Year is locked. Cannot add participants.',
+      "Year is locked. Cannot add participants.",
       ERROR_CODES.YEAR_ALREADY_LOCKED,
       409,
     );
@@ -196,7 +195,7 @@ export const bulkAddYearParticipants = async ({
         name: row?.name,
         email: row?.email,
         mobile: row?.mobile,
-        reason: `Validation failed - ${parseResult.error.issues.map((issue) => issue.message).join(', ')}`,
+        reason: `Validation failed - ${parseResult.error.issues.map((issue) => issue.message).join(", ")}`,
       });
       continue;
     }
@@ -212,14 +211,14 @@ export const bulkAddYearParticipants = async ({
 
   const { data: existingParticipants, error: existingParticipantsError } =
     await db
-      .from('year_participants')
-      .select('id, year_id, name, email, banned, disqualified')
-      .in('email', validEmails)
-      .order('created_at', { ascending: false });
+      .from("year_participants")
+      .select("id, year_id, name, email, banned, disqualified")
+      .in("email", validEmails)
+      .order("created_at", { ascending: false });
 
   if (existingParticipantsError) {
     throw new AppError(
-      'Failed to check existing participants',
+      "Failed to check existing participants",
       ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
       500,
     );
@@ -265,7 +264,7 @@ export const bulkAddYearParticipants = async ({
           name: data.name,
           email: data.email,
           mobile: data.mobile,
-          reason: 'A participant with this email was previously banned.',
+          reason: "A participant with this email was previously banned.",
         });
         continue;
       }
@@ -276,7 +275,7 @@ export const bulkAddYearParticipants = async ({
           name: data.name,
           email: data.email,
           mobile: data.mobile,
-          reason: 'Participant with this email already exists for this year.',
+          reason: "Participant with this email already exists for this year.",
         });
         continue;
       }
@@ -312,7 +311,7 @@ export const bulkAddYearParticipants = async ({
   }
 
   const { data: insertedParticipants, error: insertError } = await db
-    .from('year_participants')
+    .from("year_participants")
     .insert(rowsToInsert)
     .select();
 
@@ -320,8 +319,9 @@ export const bulkAddYearParticipants = async ({
     // bulk succeeded — map to succeededRows
     for (const inserted of insertedParticipants) {
       const meta = rowMetadata.get(inserted.email);
+      if (!meta) continue;
       succeededRows.push({
-        row: meta!.row,
+        row: meta.row,
         name: inserted.name,
         email: inserted.email,
         mobile: inserted.mobile,
@@ -332,9 +332,9 @@ export const bulkAddYearParticipants = async ({
   }
 
   // bulk failed
-  if (insertError.code !== '23505') {
+  if (insertError.code !== "23505") {
     throw new AppError(
-      'Failed to add participants',
+      "Failed to add participants",
       ERROR_CODES.YEAR_PARTICIPANT_CREATION_FAILED,
       500,
     );
@@ -343,12 +343,13 @@ export const bulkAddYearParticipants = async ({
   // fallback — one by one
   for (const row of rowsToInsert) {
     const { data: inserted, error: rowError } = await db
-      .from('year_participants')
+      .from("year_participants")
       .insert(row)
       .select()
       .single();
 
-    const meta = rowMetadata.get(row.email)!;
+    const meta = rowMetadata.get(row.email);
+    if (!meta) continue;
 
     if (!rowError) {
       succeededRows.push({
@@ -361,19 +362,19 @@ export const bulkAddYearParticipants = async ({
       continue;
     }
 
-    if (rowError.code === '23505') {
+    if (rowError.code === "23505") {
       failedRows.push({
         row: meta.row,
         name: row.name,
         email: row.email,
         mobile: row.mobile,
-        reason: 'Participant already registered for this year.',
+        reason: "Participant already registered for this year.",
       });
       continue;
     }
 
     throw new AppError(
-      'Failed to add participant',
+      "Failed to add participant",
       ERROR_CODES.YEAR_PARTICIPANT_CREATION_FAILED,
       500,
     );
@@ -421,32 +422,32 @@ export const getYearsParticipants = async ({
     }
   }
 
-  const sortColumn: 'name' | 'email' = hasPIIPermission
-    ? (filters.sort ?? 'name')
-    : 'name';
-  const sortAscending = filters.order !== 'desc';
+  const sortColumn: "name" | "email" = hasPIIPermission
+    ? (filters.sort ?? "name")
+    : "name";
+  const sortAscending = filters.order !== "desc";
 
   let baseQuery = db
-    .from('year_participants')
+    .from("year_participants")
     .select(
-      'id, name, email, mobile, reg_id, banned, disqualified, team_memberships(id, team_id, is_team_lead)',
-      { count: 'exact' },
+      "id, name, email, mobile, reg_id, banned, disqualified, team_memberships(id, team_id, is_team_lead)",
+      { count: "exact" },
     )
-    .eq('year_id', yearId)
-    .is('user_id', null)
-    .or('banned.eq.false,banned.is.null')
+    .eq("year_id", yearId)
+    .is("user_id", null)
+    .or("banned.eq.false,banned.is.null")
     .order(sortColumn, { ascending: sortAscending });
 
   if (nameFilter) {
-    baseQuery = baseQuery.ilike('name', `%${nameFilter}%`);
+    baseQuery = baseQuery.ilike("name", `%${nameFilter}%`);
   }
 
   if (emailFilter) {
-    baseQuery = baseQuery.ilike('email', `%${emailFilter}%`);
+    baseQuery = baseQuery.ilike("email", `%${emailFilter}%`);
   }
 
   if (mobileFilter) {
-    baseQuery = baseQuery.ilike('mobile', `%${mobileFilter}%`);
+    baseQuery = baseQuery.ilike("mobile", `%${mobileFilter}%`);
   }
 
   const page = Math.max(DEFAULT_PAGE, filters.page ?? DEFAULT_PAGE);
@@ -457,7 +458,7 @@ export const getYearsParticipants = async ({
 
   if (error) {
     throw new AppError(
-      'Failed to fetch participants',
+      "Failed to fetch participants",
       ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
       500,
     );
@@ -500,16 +501,16 @@ export const banParticipant = async ({
 
   const { data: fetchYearParticipant, error: fetchYearParticipantError } =
     await db
-      .from('year_participants')
-      .select('id, user_id, banned')
-      .eq('id', participantId)
-      .eq('year_id', yearId)
-      .or('banned.eq.false,banned.is.null')
+      .from("year_participants")
+      .select("id, user_id, banned")
+      .eq("id", participantId)
+      .eq("year_id", yearId)
+      .or("banned.eq.false,banned.is.null")
       .maybeSingle();
 
   if (fetchYearParticipantError) {
     throw new AppError(
-      'Failed to fetch year participant',
+      "Failed to fetch year participant",
       ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
       500,
     );
@@ -517,7 +518,7 @@ export const banParticipant = async ({
 
   if (!fetchYearParticipant) {
     throw new AppError(
-      'Participant not found or already banned',
+      "Participant not found or already banned",
       ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND_OR_ALREADY_BANNED,
       404,
     );
@@ -528,14 +529,14 @@ export const banParticipant = async ({
   }
 
   const { data: profileData, error: profileError } = await db
-    .from('profiles')
-    .select('id, global_role')
-    .eq('id', fetchYearParticipant.user_id)
+    .from("profiles")
+    .select("id, global_role")
+    .eq("id", fetchYearParticipant.user_id)
     .maybeSingle();
 
   if (profileError) {
     throw new AppError(
-      'Failed to fetch participant profile',
+      "Failed to fetch participant profile",
       ERROR_CODES.PROFILE_LOOKUP_FAILED,
       500,
     );
@@ -543,7 +544,7 @@ export const banParticipant = async ({
 
   if (!profileData) {
     throw new AppError(
-      'Participant profile not found',
+      "Participant profile not found",
       ERROR_CODES.PROFILE_NOT_FOUND,
       404,
     );
@@ -554,7 +555,7 @@ export const banParticipant = async ({
     profileData.global_role === Role.Superadmin
   ) {
     throw new AppError(
-      'Cannot ban a participant with admin or superadmin role',
+      "Cannot ban a participant with admin or superadmin role",
       ERROR_CODES.TEAM_LEAD_BAN_FAILED,
       403,
     );
@@ -562,7 +563,7 @@ export const banParticipant = async ({
 
   if (profileData.global_role !== Role.User) {
     throw new AppError(
-      'Unexpected participant role',
+      "Unexpected participant role",
       ERROR_CODES.FORBIDDEN,
       403,
     );
@@ -587,22 +588,22 @@ export const unbanParticipant = async ({
   const db = getSupabase();
 
   const { data: participantData, error: participantError } = await db
-    .from('year_participants')
-    .select('id, user_id, banned')
-    .eq('id', participantId)
-    .eq('year_id', yearId)
+    .from("year_participants")
+    .select("id, user_id, banned")
+    .eq("id", participantId)
+    .eq("year_id", yearId)
     .maybeSingle();
 
   if (participantError) {
     throw new AppError(
-      'Failed to fetch participant',
+      "Failed to fetch participant",
       ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
       500,
     );
   }
   if (!participantData) {
     throw new AppError(
-      'Participant not found',
+      "Participant not found",
       ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND,
       404,
     );
@@ -610,7 +611,7 @@ export const unbanParticipant = async ({
 
   if (!participantData.banned) {
     throw new AppError(
-      'Participant is not banned',
+      "Participant is not banned",
       ERROR_CODES.YEAR_PARTICIPANT_NOT_BANNED,
       400,
     );
@@ -622,13 +623,13 @@ export const unbanParticipant = async ({
     const { error: authError } = await db.auth.admin.updateUserById(
       participantData.user_id,
       {
-        ban_duration: 'none',
+        ban_duration: "none",
       },
     );
 
     if (authError) {
       throw new AppError(
-        'Auth API failed to restore account',
+        "Auth API failed to restore account",
         ERROR_CODES.PARTICIPANT_BAN_FAILED,
         500,
       );
@@ -637,14 +638,14 @@ export const unbanParticipant = async ({
     auth_restored = true;
   }
 
-  const { error: rpcError } = await db.rpc('unban_participant', {
+  const { error: rpcError } = await db.rpc("unban_participant", {
     p_participant_id: participantId,
   });
 
   if (rpcError) {
     if (!participantData.user_id) {
       throw new AppError(
-        'Failed to unban participant',
+        "Failed to unban participant",
         ERROR_CODES.PARTICIPANT_UNBAN_FAILED,
         500,
       );
@@ -660,9 +661,9 @@ export const unbanParticipant = async ({
   }
 
   const { data: updatedRecord } = await db
-    .from('year_participants')
-    .select('*')
-    .eq('id', participantId)
+    .from("year_participants")
+    .select("id, year_id, name, mobile, email, user_id, reg_id, banned")
+    .eq("id", participantId)
     .maybeSingle();
 
   if (!restoreCompleteAccess) {
@@ -686,7 +687,7 @@ export const unbanParticipant = async ({
   }
 
   const { error: restoreAccessRpcError } = await db.rpc(
-    'restore_team_lead_access',
+    "restore_team_lead_access",
     {
       p_year_id: yearId,
       p_user_id: participantData.user_id,
@@ -722,43 +723,43 @@ export const disqualifyParticipant = async ({
   const db = getSupabase();
 
   const { data: yearData, error: yearError } = await db
-    .from('years')
-    .select('id, is_locked')
-    .eq('id', yearId)
+    .from("years")
+    .select("id, is_locked")
+    .eq("id", yearId)
     .maybeSingle();
 
   if (yearError) {
     throw new AppError(
-      'Failed to fetch year',
+      "Failed to fetch year",
       ERROR_CODES.YEAR_FETCH_FAILED,
       500,
     );
   }
 
   if (!yearData) {
-    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
   }
 
   if (yearData.is_locked) {
     throw new AppError(
-      'Year is locked. Cannot disqualify participants.',
+      "Year is locked. Cannot disqualify participants.",
       ERROR_CODES.YEAR_ALREADY_LOCKED,
       409,
     );
   }
 
   const { data: participantData, error: participantError } = await db
-    .from('year_participants')
+    .from("year_participants")
     .select(
-      'id, year_id, name, mobile, email, reg_id, user_id, banned, disqualified',
+      "id, year_id, name, mobile, email, reg_id, user_id, banned, disqualified",
     )
-    .eq('id', participantId)
-    .eq('year_id', yearId)
+    .eq("id", participantId)
+    .eq("year_id", yearId)
     .maybeSingle();
 
   if (participantError) {
     throw new AppError(
-      'Failed to fetch participant',
+      "Failed to fetch participant",
       ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
       500,
     );
@@ -766,7 +767,7 @@ export const disqualifyParticipant = async ({
 
   if (!participantData) {
     throw new AppError(
-      'Participant not found',
+      "Participant not found",
       ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND,
       404,
     );
@@ -774,7 +775,7 @@ export const disqualifyParticipant = async ({
 
   if (participantData.disqualified) {
     throw new AppError(
-      'Participant is already disqualified',
+      "Participant is already disqualified",
       ERROR_CODES.YEAR_PARTICIPANT_ALREADY_DISQUALIFIED,
       400,
     );
@@ -782,21 +783,21 @@ export const disqualifyParticipant = async ({
 
   if (participantData.user_id) {
     throw new AppError(
-      'Cannot disqualify a team lead.',
+      "Cannot disqualify a team lead.",
       ERROR_CODES.FORBIDDEN,
       403,
     );
   }
 
   const { error: disqualifyParticipantError } = await db
-    .from('year_participants')
+    .from("year_participants")
     .update({ disqualified: true })
-    .eq('id', participantId)
-    .eq('year_id', yearId);
+    .eq("id", participantId)
+    .eq("year_id", yearId);
 
   if (disqualifyParticipantError) {
     throw new AppError(
-      'Failed to disqualify participant',
+      "Failed to disqualify participant",
       ERROR_CODES.YEAR_PARTICIPANT_DISQUALIFY_FAILED,
       500,
     );
@@ -815,43 +816,43 @@ export const undisqualifyParticipant = async ({
   const db = getSupabase();
 
   const { data: yearData, error: yearError } = await db
-    .from('years')
-    .select('id, is_locked')
-    .eq('id', yearId)
+    .from("years")
+    .select("id, is_locked")
+    .eq("id", yearId)
     .maybeSingle();
 
   if (yearError) {
     throw new AppError(
-      'Failed to fetch year',
+      "Failed to fetch year",
       ERROR_CODES.YEAR_FETCH_FAILED,
       500,
     );
   }
 
   if (!yearData) {
-    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
   }
 
   if (yearData.is_locked) {
     throw new AppError(
-      'Year is locked. Cannot undisqualify participants.',
+      "Year is locked. Cannot undisqualify participants.",
       ERROR_CODES.YEAR_ALREADY_LOCKED,
       409,
     );
   }
 
   const { data: participantData, error: participantError } = await db
-    .from('year_participants')
+    .from("year_participants")
     .select(
-      'id, year_id, name, mobile, email, reg_id, user_id, banned, disqualified',
+      "id, year_id, name, mobile, email, reg_id, user_id, banned, disqualified",
     )
-    .eq('id', participantId)
-    .eq('year_id', yearId)
+    .eq("id", participantId)
+    .eq("year_id", yearId)
     .maybeSingle();
 
   if (participantError) {
     throw new AppError(
-      'Failed to fetch participant',
+      "Failed to fetch participant",
       ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
       500,
     );
@@ -859,7 +860,7 @@ export const undisqualifyParticipant = async ({
 
   if (!participantData) {
     throw new AppError(
-      'Participant not found',
+      "Participant not found",
       ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND,
       404,
     );
@@ -867,21 +868,21 @@ export const undisqualifyParticipant = async ({
 
   if (!participantData.disqualified) {
     throw new AppError(
-      'Participant is not disqualified',
+      "Participant is not disqualified",
       ERROR_CODES.YEAR_PARTICIPANT_NOT_DISQUALIFIED,
       400,
     );
   }
 
   const { error: undisqualifyParticipantError } = await db
-    .from('year_participants')
+    .from("year_participants")
     .update({ disqualified: false })
-    .eq('id', participantId)
-    .eq('year_id', yearId);
+    .eq("id", participantId)
+    .eq("year_id", yearId);
 
   if (undisqualifyParticipantError) {
     throw new AppError(
-      'Failed to undisqualify participant',
+      "Failed to undisqualify participant",
       ERROR_CODES.YEAR_PARTICIPANT_UNDISQUALIFY_FAILED,
       500,
     );
@@ -894,34 +895,34 @@ export const getTeamLeadsForYear = async (yearId: string) => {
   const db = getSupabase();
 
   const { data: yearsData, error: yearsError } = await db
-    .from('years')
-    .select('id')
-    .eq('id', yearId)
+    .from("years")
+    .select("id")
+    .eq("id", yearId)
     .maybeSingle();
 
   if (yearsError) {
     throw new AppError(
-      'Failed to fetch year',
+      "Failed to fetch year",
       ERROR_CODES.YEAR_FETCH_FAILED,
       500,
     );
   }
 
   if (!yearsData) {
-    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
   }
 
   const { data: teamLeadsData, error: teamLeadsError } = await db
-    .from('year_participants')
+    .from("year_participants")
     .select(
-      'id, name, email, mobile, reg_id, user_id, banned, team_memberships(id, team_id, is_team_lead)',
+      "id, name, email, mobile, reg_id, user_id, banned, team_memberships(id, team_id, is_team_lead)",
     )
-    .eq('year_id', yearsData.id)
-    .not('user_id', 'is', null);
+    .eq("year_id", yearsData.id)
+    .not("user_id", "is", null);
 
   if (teamLeadsError) {
     throw new AppError(
-      'Failed to fetch team leads',
+      "Failed to fetch team leads",
       ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
       500,
     );

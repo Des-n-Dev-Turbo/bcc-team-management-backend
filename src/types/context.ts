@@ -1,5 +1,5 @@
-import type { Role } from './role.ts';
-import { YearAccessStatus } from './year_access.ts';
+import type { Role } from "./role.ts";
+import type { YearAccessStatus } from "./year_access.ts";
 
 export type AppContext = {
   Variables: {

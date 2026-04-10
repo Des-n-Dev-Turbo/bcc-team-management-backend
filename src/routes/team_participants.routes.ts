@@ -1,36 +1,34 @@
-import { Hono } from 'hono';
+import { Hono } from "hono";
 
 import {
-  supabaseAuth,
-  requireRole,
   loadProfile,
+  requireRole,
   requireYearAccess,
-} from '@/middleware';
-
-import { getTeamYearParticipants } from '@/services';
-import { validate, getValidated } from '@/utils/validate.ts';
-import { getTeamParticipantsParamsSchema } from '@/schemas/year_participants.schema.ts';
-
-import { type AppContext, Role } from '@/types';
+  supabaseAuth,
+} from "@/middleware";
+import { getTeamParticipantsParamsSchema } from "@/schemas/year_participants.schema.ts";
+import { getTeamYearParticipants } from "@/services";
+import { type AppContext, Role } from "@/types";
+import { getValidated, validate } from "@/utils/validate.ts";
 
 const teamParticipantsRouter = new Hono<AppContext>();
 
 teamParticipantsRouter.get(
-  '/:teamId/participants',
+  "/:teamId/participants",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Viewer),
   requireYearAccess,
-  validate('param', getTeamParticipantsParamsSchema),
+  validate("param", getTeamParticipantsParamsSchema),
   async (c) => {
     const { yearId, teamId } = getValidated(
       c,
-      'param',
+      "param",
       getTeamParticipantsParamsSchema,
     );
 
-    const userId = c.get('userId');
-    const role = c.get('profile').global_role as Role;
+    const userId = c.get("userId");
+    const role = c.get("profile").global_role as Role;
 
     const participants = await getTeamYearParticipants({
       yearId,

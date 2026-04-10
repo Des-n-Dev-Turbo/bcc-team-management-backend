@@ -1,6 +1,6 @@
-import * as zod from '@zod/zod';
+import * as zod from "@zod/zod";
 
-import { nameSchema, uuidSchema } from './common.schema.ts';
+import { nameSchema, uuidSchema } from "./common.schema.ts";
 
 export const yearParticipantsParamsSchema = zod.object({
   yearId: uuidSchema,
@@ -22,7 +22,7 @@ export const getYearParticipantsQuerySchema = zod.object({
   page: zod
     .string()
     .optional()
-    .transform((val) => parseInt(val ?? '1', 10))
+    .transform((val) => parseInt(val ?? "1", 10))
     .pipe(zod.number().min(1)),
   name: zod
     .string()
@@ -36,8 +36,8 @@ export const getYearParticipantsQuerySchema = zod.object({
     .string()
     .optional()
     .transform((val) => val?.trim()),
-  sort: zod.enum(['name', 'email']).optional().default('name'),
-  order: zod.enum(['asc', 'desc']).optional().default('asc'),
+  sort: zod.enum(["name", "email"]).optional().default("name"),
+  order: zod.enum(["asc", "desc"]).optional().default("asc"),
 });
 
 export const getTeamParticipantsParamsSchema = zod.object({

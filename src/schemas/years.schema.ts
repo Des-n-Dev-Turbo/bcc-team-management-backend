@@ -1,6 +1,6 @@
-import * as z from '@zod/zod';
+import * as z from "@zod/zod";
 
-import { nameSchema, uuidSchema } from './common.schema.ts';
+import { nameSchema, uuidSchema } from "./common.schema.ts";
 
 export const createYearSchema = z.object({
   name: nameSchema,

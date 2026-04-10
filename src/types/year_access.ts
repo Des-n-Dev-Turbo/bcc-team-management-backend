@@ -1,7 +1,7 @@
 export enum YearAccessStatus {
-  PENDING = 'pending',
-  APPROVED = 'approved',
-  REJECTED = 'rejected',
+  PENDING = "pending",
+  APPROVED = "approved",
+  REJECTED = "rejected",
 }
 
 export type YearAccessPendingEntry = {

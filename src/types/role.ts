@@ -1,8 +1,8 @@
 export enum Role {
-  Viewer = 'viewer',
-  User = 'user',
-  Admin = 'admin',
-  Superadmin = 'superadmin',
+  Viewer = "viewer",
+  User = "user",
+  Admin = "admin",
+  Superadmin = "superadmin",
 }
 
 export const roleHierarchy: Record<Role, number> = {

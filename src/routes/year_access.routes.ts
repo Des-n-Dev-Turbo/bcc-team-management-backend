@@ -1,37 +1,36 @@
-import { Hono } from 'hono';
+import { Hono } from "hono";
 
-import { loadProfile, requireRole, supabaseAuth } from '@/middleware';
-import { validate, getValidated } from '@/utils/validate.ts';
+import { loadProfile, requireRole, supabaseAuth } from "@/middleware";
 import {
   approveRejectYearAccessSchema,
   requestYearAccessSchema,
-} from '@/schemas/year_access.schema.ts';
+} from "@/schemas/year_access.schema.ts";
 import {
   getYearAccessRequests,
   requestYearAccess,
   updateYearAccess,
-} from '@/services';
-
-import { Role, YearAccessStatus, type AppContext } from '@/types';
+} from "@/services";
+import { type AppContext, Role, YearAccessStatus } from "@/types";
+import { getValidated, validate } from "@/utils/validate.ts";
 
 const router = new Hono<AppContext>();
 
 router.post(
-  '/',
+  "/",
   supabaseAuth,
   loadProfile,
-  validate('query', requestYearAccessSchema),
+  validate("query", requestYearAccessSchema),
   async (c) => {
-    const yearId = getValidated(c, 'query', requestYearAccessSchema).yearId;
+    const yearId = getValidated(c, "query", requestYearAccessSchema).yearId;
 
-    const userId = c.get('userId');
+    const userId = c.get("userId");
 
     const result = await requestYearAccess({ yearId, userId });
 
     if (result) {
       return c.json(
         {
-          message: 'Access request submitted successfully.',
+          message: "Access request submitted successfully.",
         },
         201,
       );
@@ -40,13 +39,13 @@ router.post(
 );
 
 router.patch(
-  '/:id/approve',
+  "/:id/approve",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('param', approveRejectYearAccessSchema),
+  validate("param", approveRejectYearAccessSchema),
   async (c) => {
-    const id = getValidated(c, 'param', approveRejectYearAccessSchema).id;
+    const id = getValidated(c, "param", approveRejectYearAccessSchema).id;
 
     const status = YearAccessStatus.APPROVED;
 
@@ -55,7 +54,7 @@ router.patch(
     if (result) {
       return c.json(
         {
-          message: 'Access request approved.',
+          message: "Access request approved.",
         },
         200,
       );
@@ -64,13 +63,13 @@ router.patch(
 );
 
 router.patch(
-  '/:id/reject',
+  "/:id/reject",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('param', approveRejectYearAccessSchema),
+  validate("param", approveRejectYearAccessSchema),
   async (c) => {
-    const id = getValidated(c, 'param', approveRejectYearAccessSchema).id;
+    const id = getValidated(c, "param", approveRejectYearAccessSchema).id;
 
     const status = YearAccessStatus.REJECTED;
 
@@ -79,7 +78,7 @@ router.patch(
     if (result) {
       return c.json(
         {
-          message: 'Access request rejected.',
+          message: "Access request rejected.",
         },
         200,
       );
@@ -88,13 +87,13 @@ router.patch(
 );
 
 router.get(
-  '/',
+  "/",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('query', requestYearAccessSchema),
+  validate("query", requestYearAccessSchema),
   async (c) => {
-    const { yearId } = getValidated(c, 'query', requestYearAccessSchema);
+    const { yearId } = getValidated(c, "query", requestYearAccessSchema);
 
     const result = await getYearAccessRequests({ yearId });
 

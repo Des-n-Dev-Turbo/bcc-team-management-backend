@@ -1,16 +1,14 @@
-import { getSupabase } from '@/lib';
-import { AppError } from '@/utils/error.ts';
-
-import { ERROR_CODES } from '@/constants/error-codes.ts';
-import { MAX_YEAR_REQUEST_ATTEMPTS } from '@/constants/common.ts';
-
+import { MAX_YEAR_REQUEST_ATTEMPTS } from "@/constants/common.ts";
+import { ERROR_CODES } from "@/constants/error-codes.ts";
+import { getSupabase } from "@/lib";
 import {
-  YearAccessStatus,
-  type YearAccessPendingEntry,
   type YearAccessEntry,
+  type YearAccessPendingEntry,
   type YearAccessRejectedEntry,
   type YearAccessRequestsResult,
-} from '@/types';
+  YearAccessStatus,
+} from "@/types";
+import { AppError } from "@/utils/error.ts";
 
 export const requestYearAccess = async ({
   yearId,
@@ -22,41 +20,41 @@ export const requestYearAccess = async ({
   const db = getSupabase();
 
   const { data: yearData, error: yearError } = await db
-    .from('years')
-    .select('id, name, is_locked')
-    .eq('id', yearId)
+    .from("years")
+    .select("id, name, is_locked")
+    .eq("id", yearId)
     .maybeSingle();
 
   if (yearError) {
     throw new AppError(
-      'Failed to fetch year',
+      "Failed to fetch year",
       ERROR_CODES.YEAR_FETCH_FAILED,
       500,
     );
   }
 
   if (!yearData) {
-    throw new AppError('Year not found', ERROR_CODES.YEAR_NOT_FOUND, 404);
+    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
   }
 
   if (yearData.is_locked) {
     throw new AppError(
-      'Year is already locked',
+      "Year is already locked",
       ERROR_CODES.YEAR_ALREADY_LOCKED,
       409,
     );
   }
 
   const { data: yearAccessData, error: yearAccessError } = await db
-    .from('year_access')
-    .select('id, user_id, year_id, status')
-    .eq('user_id', userId)
-    .eq('year_id', yearData.id)
-    .order('created_at', { ascending: false });
+    .from("year_access")
+    .select("id, user_id, year_id, status")
+    .eq("user_id", userId)
+    .eq("year_id", yearData.id)
+    .order("created_at", { ascending: false });
 
   if (yearAccessError) {
     throw new AppError(
-      'Failed to fetch year access data',
+      "Failed to fetch year access data",
       ERROR_CODES.YEAR_ACCESS_FETCH_FAILED,
       500,
     );
@@ -77,7 +75,7 @@ export const requestYearAccess = async ({
     previousRequestData.status === YearAccessStatus.PENDING
   ) {
     throw new AppError(
-      'You cannot request while previous request is still pending',
+      "You cannot request while previous request is still pending",
       ERROR_CODES.FORBIDDEN,
       409,
     );
@@ -88,14 +86,14 @@ export const requestYearAccess = async ({
     previousRequestData.status === YearAccessStatus.APPROVED
   ) {
     throw new AppError(
-      'You already have access to this year',
+      "You already have access to this year",
       ERROR_CODES.FORBIDDEN,
       409,
     );
   }
 
   const { data: requestData, error: requestError } = await db
-    .from('year_access')
+    .from("year_access")
     .insert({
       user_id: userId,
       year_id: yearData.id,
@@ -106,7 +104,7 @@ export const requestYearAccess = async ({
 
   if (requestError) {
     throw new AppError(
-      'Error while raising request',
+      "Error while raising request",
       ERROR_CODES.YEAR_ACCESS_REQUEST_FAILED,
       500,
     );
@@ -125,15 +123,15 @@ export const updateYearAccess = async ({
   const db = getSupabase();
 
   const { data: yearAccessData, error: yearAccessError } = await db
-    .from('year_access')
-    .select('id, user_id, year_id, status')
-    .eq('id', id)
-    .order('created_at', { ascending: false })
+    .from("year_access")
+    .select("id, user_id, year_id, status")
+    .eq("id", id)
+    .order("created_at", { ascending: false })
     .maybeSingle();
 
   if (yearAccessError) {
     throw new AppError(
-      'Failed to fetch year access data',
+      "Failed to fetch year access data",
       ERROR_CODES.YEAR_ACCESS_FETCH_FAILED,
       500,
     );
@@ -141,7 +139,7 @@ export const updateYearAccess = async ({
 
   if (!yearAccessData) {
     throw new AppError(
-      'There is no request with this id.',
+      "There is no request with this id.",
       ERROR_CODES.YEAR_ACCESS_REQUEST_NOT_AVAILABLE,
       404,
     );
@@ -149,22 +147,22 @@ export const updateYearAccess = async ({
 
   if (yearAccessData.status !== YearAccessStatus.PENDING) {
     throw new AppError(
-      'The request access is not pending. Please check the request details.',
+      "The request access is not pending. Please check the request details.",
       ERROR_CODES.FORBIDDEN,
       409,
     );
   }
 
   const { data: updateAccessData, error: updateAccessError } = await db
-    .from('year_access')
+    .from("year_access")
     .update({ status })
-    .eq('id', yearAccessData.id)
-    .select('id, user_id, year_id, status')
+    .eq("id", yearAccessData.id)
+    .select("id, user_id, year_id, status")
     .single();
 
   if (updateAccessError) {
     throw new AppError(
-      `Error while ${status === YearAccessStatus.APPROVED ? 'approving' : 'rejecting'} request`,
+      `Error while ${status === YearAccessStatus.APPROVED ? "approving" : "rejecting"} request`,
       status === YearAccessStatus.APPROVED
         ? ERROR_CODES.YEAR_ACCESS_REQUEST_APPROVE_FAILED
         : ERROR_CODES.YEAR_ACCESS_REQUEST_REJECT_FAILED,
@@ -179,16 +177,16 @@ export const getYearAccessRequests = async ({ yearId }: { yearId: string }) => {
   const db = getSupabase();
 
   const { data: yearsAccessData, error: yearsAccessError } = await db
-    .from('year_access')
-    .select('id, user_id, year_id, status, created_at')
-    .eq('year_id', yearId)
-    .order('created_at', {
+    .from("year_access")
+    .select("id, user_id, year_id, status, created_at")
+    .eq("year_id", yearId)
+    .order("created_at", {
       ascending: false,
     });
 
   if (yearsAccessError) {
     throw new AppError(
-      'Failed to fetch year access data',
+      "Failed to fetch year access data",
       ERROR_CODES.YEAR_ACCESS_FETCH_FAILED,
       500,
     );
@@ -208,7 +206,7 @@ export const getYearAccessRequests = async ({ yearId }: { yearId: string }) => {
 
   if (error) {
     throw new AppError(
-      'Failed to fetch all users',
+      "Failed to fetch all users",
       ERROR_CODES.INTERNAL_SERVER_ERROR,
       500,
     );
@@ -216,7 +214,7 @@ export const getYearAccessRequests = async ({ yearId }: { yearId: string }) => {
 
   if (!allUsers || allUsers.length === 0) {
     throw new AppError(
-      'List of all users is unavailable',
+      "List of all users is unavailable",
       ERROR_CODES.INTERNAL_SERVER_ERROR,
       500,
     );

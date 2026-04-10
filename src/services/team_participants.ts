@@ -1,9 +1,8 @@
-import { getSupabase } from '@/lib';
-import { AppError } from '@/utils/error.ts';
-import { applyPrivacyMask, getRequesterTeam } from '@/utils/participants.ts';
-import { ERROR_CODES } from '@/constants/error-codes.ts';
-
-import { Role } from '@/types';
+import { ERROR_CODES } from "@/constants/error-codes.ts";
+import { getSupabase } from "@/lib";
+import type { Role } from "@/types";
+import { AppError } from "@/utils/error.ts";
+import { applyPrivacyMask, getRequesterTeam } from "@/utils/participants.ts";
 
 export const getTeamYearParticipants = async ({
   yearId,
@@ -19,14 +18,14 @@ export const getTeamYearParticipants = async ({
   const db = getSupabase();
 
   const { data: teamData } = await db
-    .from('teams')
-    .select('id')
-    .eq('id', teamId)
-    .eq('year_id', yearId)
+    .from("teams")
+    .select("id")
+    .eq("id", teamId)
+    .eq("year_id", yearId)
     .maybeSingle();
 
   if (!teamData) {
-    throw new AppError('Team not found', ERROR_CODES.TEAM_NOT_FOUND, 404);
+    throw new AppError("Team not found", ERROR_CODES.TEAM_NOT_FOUND, 404);
   }
 
   const { canSeePII } = await getRequesterTeam({
@@ -36,20 +35,20 @@ export const getTeamYearParticipants = async ({
   });
 
   const { data: participantsData, error: participantsError } = await db
-    .from('year_participants')
+    .from("year_participants")
     .select(
-      'id, name, email, mobile, reg_id, banned, disqualified, team_memberships!inner(id, team_id, is_team_lead)',
+      "id, name, email, mobile, reg_id, banned, disqualified, team_memberships!inner(id, team_id, is_team_lead)",
     )
-    .eq('team_memberships.team_id', teamData.id)
-    .eq('year_id', yearId)
-    .or('banned.eq.false,banned.is.null')
-    .is('user_id', null)
-    .order('name', { ascending: true })
+    .eq("team_memberships.team_id", teamData.id)
+    .eq("year_id", yearId)
+    .or("banned.eq.false,banned.is.null")
+    .is("user_id", null)
+    .order("name", { ascending: true })
     .limit(50);
 
   if (participantsError) {
     throw new AppError(
-      'Failed to fetch team participants',
+      "Failed to fetch team participants",
       ERROR_CODES.TEAM_PARTICIPANT_FETCH_FAILED,
       500,
     );

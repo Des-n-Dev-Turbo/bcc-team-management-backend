@@ -1,10 +1,8 @@
-import { getSupabase } from '@/lib';
-
-import { AppError } from './error.ts';
-
-import { ERROR_CODES } from '@/constants/error-codes.ts';
-import { PERMANENT_BAN_DURATION } from '@/constants/common.ts';
-import { ParticipantBanResult, Role } from '@/types';
+import { PERMANENT_BAN_DURATION } from "@/constants/common.ts";
+import { ERROR_CODES } from "@/constants/error-codes.ts";
+import { getSupabase } from "@/lib";
+import { type ParticipantBanResult, Role } from "@/types";
+import { AppError } from "./error.ts";
 
 export const getRequesterTeam = async ({
   yearId,
@@ -27,15 +25,15 @@ export const getRequesterTeam = async ({
     const db = getSupabase();
 
     const { data, error } = await db
-      .from('year_participants')
-      .select('team_memberships(team_id, is_team_lead)')
-      .eq('year_id', yearId)
-      .eq('user_id', userId)
+      .from("year_participants")
+      .select("team_memberships(team_id, is_team_lead)")
+      .eq("year_id", yearId)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (error) {
       throw new AppError(
-        'Unable to fetch team membership details',
+        "Unable to fetch team membership details",
         ERROR_CODES.TEAM_MEMBERSHIP_FETCH_FAILED,
         500,
       );
@@ -69,11 +67,11 @@ export const applyPrivacyMask = (
   return data.map((item) => {
     const maskedItem: Record<string, unknown> = { ...item };
 
-    if ('email' in maskedItem) {
+    if ("email" in maskedItem) {
       maskedItem.email = null;
     }
 
-    if ('mobile' in maskedItem) {
+    if ("mobile" in maskedItem) {
       maskedItem.mobile = null;
     }
     return maskedItem;
@@ -87,13 +85,13 @@ export const banVolunteer = async ({
 }): Promise<ParticipantBanResult> => {
   const db = getSupabase();
 
-  const { error } = await db.rpc('ban_volunteer', {
+  const { error } = await db.rpc("ban_volunteer", {
     p_participant_id: participantId,
   });
 
   if (error) {
     throw new AppError(
-      'Atomic DB update failed for volunteer ban',
+      "Atomic DB update failed for volunteer ban",
       ERROR_CODES.PARTICIPANT_BAN_FAILED,
       500,
     );
@@ -101,9 +99,9 @@ export const banVolunteer = async ({
 
   // Fetch updated record for response
   const { data } = await db
-    .from('year_participants')
-    .select('id, year_id, name, mobile, email, user_id, reg_id, banned')
-    .eq('id', participantId)
+    .from("year_participants")
+    .select("id, year_id, name, mobile, email, user_id, reg_id, banned")
+    .eq("id", participantId)
     .single();
 
   return { success: true, db_updated: true, data, account_disabled: false };
@@ -126,13 +124,13 @@ export const banTeamLead = async ({
 
   if (authError) {
     throw new AppError(
-      'Auth API failed',
+      "Auth API failed",
       ERROR_CODES.TEAM_LEAD_BAN_FAILED,
       500,
     );
   }
 
-  const { error: rpcError } = await db.rpc('ban_team_lead', {
+  const { error: rpcError } = await db.rpc("ban_team_lead", {
     p_participant_id: participantId,
     p_user_id: userId,
     p_year_id: yearId,
@@ -148,9 +146,9 @@ export const banTeamLead = async ({
   }
 
   const { data } = await db
-    .from('year_participants')
-    .select('id, year_id, name, mobile, email, user_id, reg_id, banned')
-    .eq('id', participantId)
+    .from("year_participants")
+    .select("id, year_id, name, mobile, email, user_id, reg_id, banned")
+    .eq("id", participantId)
     .single();
 
   return { success: true, account_disabled: true, db_updated: true, data };

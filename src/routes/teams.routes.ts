@@ -1,33 +1,32 @@
-import { Hono } from 'hono';
+import { Hono } from "hono";
 
-import { supabaseAuth, loadProfile, requireRole } from '@/middleware';
-import {
-  createTeam,
-  getTeamsByYear,
-  updateTeamName,
-  copyTeamsToYear,
-} from '@/services';
+import { loadProfile, requireRole, supabaseAuth } from "@/middleware";
 import {
   createTeamSchema,
   getTeamsSchema,
   teamIdsParamsSchema,
   updateTeamNameParamsSchema,
   updateTeamNameSchema,
-} from '@/schemas/teams.schema.ts';
-
-import { validate, getValidated } from '@/utils/validate.ts';
-import { type AppContext, Role } from '@/types';
+} from "@/schemas/teams.schema.ts";
+import {
+  copyTeamsToYear,
+  createTeam,
+  getTeamsByYear,
+  updateTeamName,
+} from "@/services";
+import { type AppContext, Role } from "@/types";
+import { getValidated, validate } from "@/utils/validate.ts";
 
 const router = new Hono<AppContext>();
 
 router.post(
-  '/create',
+  "/create",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('json', createTeamSchema),
+  validate("json", createTeamSchema),
   async (c) => {
-    const body = getValidated(c, 'json', createTeamSchema);
+    const body = getValidated(c, "json", createTeamSchema);
 
     const { name, yearId } = body;
 
@@ -37,12 +36,12 @@ router.post(
 );
 
 router.get(
-  '/',
+  "/",
   supabaseAuth,
   loadProfile,
-  validate('query', getTeamsSchema),
+  validate("query", getTeamsSchema),
   async (c) => {
-    const { yearId } = getValidated(c, 'query', getTeamsSchema);
+    const { yearId } = getValidated(c, "query", getTeamsSchema);
 
     const teams = await getTeamsByYear(yearId);
 
@@ -51,16 +50,16 @@ router.get(
 );
 
 router.patch(
-  '/:teamId',
+  "/:teamId",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('param', updateTeamNameParamsSchema),
-  validate('json', updateTeamNameSchema),
+  validate("param", updateTeamNameParamsSchema),
+  validate("json", updateTeamNameSchema),
   async (c) => {
-    const teamId = getValidated(c, 'param', updateTeamNameParamsSchema).teamId;
+    const teamId = getValidated(c, "param", updateTeamNameParamsSchema).teamId;
 
-    const { name: newName } = getValidated(c, 'json', updateTeamNameSchema);
+    const { name: newName } = getValidated(c, "json", updateTeamNameSchema);
 
     const updatedTeam = await updateTeamName(teamId, newName);
     return c.json(updatedTeam, 200);
@@ -68,16 +67,16 @@ router.patch(
 );
 
 router.post(
-  '/year/:yearId/copy',
+  "/year/:yearId/copy",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('param', getTeamsSchema),
-  validate('json', teamIdsParamsSchema),
+  validate("param", getTeamsSchema),
+  validate("json", teamIdsParamsSchema),
   async (c) => {
-    const { yearId } = getValidated(c, 'param', getTeamsSchema);
+    const { yearId } = getValidated(c, "param", getTeamsSchema);
 
-    const { teamIds } = getValidated(c, 'json', teamIdsParamsSchema);
+    const { teamIds } = getValidated(c, "json", teamIdsParamsSchema);
 
     const copiedTeams = await copyTeamsToYear({ yearId, teamIds });
 

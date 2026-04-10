@@ -1,6 +1,6 @@
-import * as z from '@zod/zod';
+import * as z from "@zod/zod";
 
-import { uuidSchema } from '@/schemas/common.schema.ts';
+import { uuidSchema } from "@/schemas/common.schema.ts";
 
 export const addParticipantToTeamSchema = z.object({
   teamId: uuidSchema,

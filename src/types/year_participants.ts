@@ -24,15 +24,26 @@ export type YearParticipantFilters = {
   name?: string;
   email?: string;
   mobile?: string;
-  sort?: 'name' | 'email';
-  order?: 'asc' | 'desc';
+  sort?: "name" | "email";
+  order?: "asc" | "desc";
+};
+
+export type YearParticipantRecord = {
+  id: string;
+  year_id: string;
+  name: string;
+  email: string;
+  mobile: string;
+  user_id: string | null;
+  reg_id: string | null;
+  banned: boolean;
 };
 
 export interface ParticipantBanResult {
   success: boolean;
   account_disabled: boolean;
   db_updated: boolean;
-  data: any | null; // The updated participant record
+  data: YearParticipantRecord | null;
 }
 
 export interface ParticipantUnbanResult {
@@ -40,5 +51,5 @@ export interface ParticipantUnbanResult {
   auth_restored: boolean;
   restoredCompleteAccess: boolean;
   db_updated: boolean;
-  data: any | null;
+  data: YearParticipantRecord | null;
 }

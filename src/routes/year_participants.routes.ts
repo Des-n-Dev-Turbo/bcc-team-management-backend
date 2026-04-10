@@ -1,48 +1,45 @@
-import { Hono } from 'hono';
-import { CsvParseStream } from '@std/csv/parse-stream';
-
+import { CsvParseStream } from "@std/csv/parse-stream";
+import { Hono } from "hono";
+import { ERROR_CODES } from "@/constants/error-codes.ts";
 import {
-  supabaseAuth,
-  requireRole,
   loadProfile,
+  requireRole,
   requireYearAccess,
-} from '@/middleware';
+  supabaseAuth,
+} from "@/middleware";
+import {
+  getYearParticipantsQuerySchema,
+  yearParticipantsBanParamsSchema,
+  yearParticipantsParamsSchema,
+  yearParticipantsSchema,
+  yearParticipantsUnbanParamsSchema,
+  yearParticipantsUnbanQuerySchema,
+} from "@/schemas/year_participants.schema.ts";
 import {
   addYearParticipant,
   banParticipant,
   bulkAddYearParticipants,
+  disqualifyParticipant,
   getYearsParticipants,
   unbanParticipant,
-  disqualifyParticipant,
   undisqualifyParticipant,
-} from '@/services';
-import {
-  yearParticipantsSchema,
-  yearParticipantsParamsSchema,
-  getYearParticipantsQuerySchema,
-  yearParticipantsBanParamsSchema,
-  yearParticipantsUnbanParamsSchema,
-  yearParticipantsUnbanQuerySchema,
-} from '@/schemas/year_participants.schema.ts';
-import { validate, getValidated } from '@/utils/validate.ts';
-import { AppError } from '@/utils/error.ts';
-
-import { ERROR_CODES } from '@/constants/error-codes.ts';
-
-import { type AppContext, Role } from '@/types';
+} from "@/services";
+import { type AppContext, Role } from "@/types";
+import { AppError } from "@/utils/error.ts";
+import { getValidated, validate } from "@/utils/validate.ts";
 
 const yearsParticipantRouter = new Hono<AppContext>();
 
 yearsParticipantRouter.post(
-  '/',
+  "/",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('param', yearParticipantsParamsSchema),
-  validate('json', yearParticipantsSchema),
+  validate("param", yearParticipantsParamsSchema),
+  validate("json", yearParticipantsSchema),
   async (c) => {
-    const { yearId } = getValidated(c, 'param', yearParticipantsParamsSchema);
-    const participantData = getValidated(c, 'json', yearParticipantsSchema);
+    const { yearId } = getValidated(c, "param", yearParticipantsParamsSchema);
+    const participantData = getValidated(c, "json", yearParticipantsSchema);
 
     const addedParticipant = await addYearParticipant({
       yearId,
@@ -64,29 +61,29 @@ yearsParticipantRouter.post(
 );
 
 yearsParticipantRouter.post(
-  '/bulk',
+  "/bulk",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('param', yearParticipantsParamsSchema),
+  validate("param", yearParticipantsParamsSchema),
   async (c) => {
-    const { yearId } = getValidated(c, 'param', yearParticipantsParamsSchema);
+    const { yearId } = getValidated(c, "param", yearParticipantsParamsSchema);
 
     const formData = await c.req.formData();
 
-    const file = formData.get('file');
+    const file = formData.get("file");
 
     if (!file || !(file instanceof File)) {
       throw new AppError(
-        'Invalid file upload',
+        "Invalid file upload",
         ERROR_CODES.INVALID_FILE_UPLOAD,
         422,
       );
     }
 
-    if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
+    if (file.type !== "text/csv" && !file.name.endsWith(".csv")) {
       throw new AppError(
-        'Invalid file type. Only CSV files are allowed.',
+        "Invalid file type. Only CSV files are allowed.",
         ERROR_CODES.INVALID_FILE_UPLOAD,
         422,
       );
@@ -106,20 +103,20 @@ yearsParticipantRouter.post(
 );
 
 yearsParticipantRouter.get(
-  '/',
+  "/",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Viewer),
   requireYearAccess,
-  validate('param', yearParticipantsParamsSchema),
-  validate('query', getYearParticipantsQuerySchema),
+  validate("param", yearParticipantsParamsSchema),
+  validate("query", getYearParticipantsQuerySchema),
   async (c) => {
-    const { yearId } = getValidated(c, 'param', yearParticipantsParamsSchema);
+    const { yearId } = getValidated(c, "param", yearParticipantsParamsSchema);
 
-    const filters = getValidated(c, 'query', getYearParticipantsQuerySchema);
+    const filters = getValidated(c, "query", getYearParticipantsQuerySchema);
 
-    const userId = c.get('userId');
-    const role = c.get('profile').global_role as Role;
+    const userId = c.get("userId");
+    const role = c.get("profile").global_role as Role;
 
     const { participants, total, page, pageSize } = await getYearsParticipants({
       yearId,
@@ -138,22 +135,22 @@ yearsParticipantRouter.get(
 );
 
 yearsParticipantRouter.patch(
-  '/:participantId/ban',
+  "/:participantId/ban",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('param', yearParticipantsBanParamsSchema),
+  validate("param", yearParticipantsBanParamsSchema),
   async (c) => {
-    const params = getValidated(c, 'param', yearParticipantsBanParamsSchema);
+    const params = getValidated(c, "param", yearParticipantsBanParamsSchema);
 
     const result = await banParticipant(params);
 
     if (result.account_disabled && !result.db_updated) {
       return c.json(
         {
-          status: 'partial_success',
+          status: "partial_success",
           message:
-            'Account disabled in Auth, but DB update failed. Manual intervention required.',
+            "Account disabled in Auth, but DB update failed. Manual intervention required.",
           details: result,
         },
         207,
@@ -165,15 +162,15 @@ yearsParticipantRouter.patch(
 );
 
 yearsParticipantRouter.patch(
-  '/:participantId/unban',
+  "/:participantId/unban",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('param', yearParticipantsUnbanParamsSchema),
-  validate('query', yearParticipantsUnbanQuerySchema),
+  validate("param", yearParticipantsUnbanParamsSchema),
+  validate("query", yearParticipantsUnbanQuerySchema),
   async (c) => {
-    const params = getValidated(c, 'param', yearParticipantsUnbanParamsSchema);
-    const query = getValidated(c, 'query', yearParticipantsUnbanQuerySchema);
+    const params = getValidated(c, "param", yearParticipantsUnbanParamsSchema);
+    const query = getValidated(c, "query", yearParticipantsUnbanQuerySchema);
 
     const result = await unbanParticipant({
       ...params,
@@ -183,9 +180,9 @@ yearsParticipantRouter.patch(
     if (result.auth_restored && !result.db_updated) {
       return c.json(
         {
-          status: 'partial_success',
+          status: "partial_success",
           message:
-            'Auth restored, but DB update failed. Manual intervention required to restore participant access.',
+            "Auth restored, but DB update failed. Manual intervention required to restore participant access.",
           details: result,
         },
         207,
@@ -197,13 +194,13 @@ yearsParticipantRouter.patch(
 );
 
 yearsParticipantRouter.patch(
-  '/:participantId/disqualify',
+  "/:participantId/disqualify",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('param', yearParticipantsBanParamsSchema),
+  validate("param", yearParticipantsBanParamsSchema),
   async (c) => {
-    const params = getValidated(c, 'param', yearParticipantsBanParamsSchema);
+    const params = getValidated(c, "param", yearParticipantsBanParamsSchema);
 
     const result = await disqualifyParticipant(params);
 
@@ -212,13 +209,13 @@ yearsParticipantRouter.patch(
 );
 
 yearsParticipantRouter.patch(
-  '/:participantId/undisqualify',
+  "/:participantId/undisqualify",
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  validate('param', yearParticipantsBanParamsSchema),
+  validate("param", yearParticipantsBanParamsSchema),
   async (c) => {
-    const params = getValidated(c, 'param', yearParticipantsBanParamsSchema);
+    const params = getValidated(c, "param", yearParticipantsBanParamsSchema);
 
     const result = await undisqualifyParticipant(params);
 
