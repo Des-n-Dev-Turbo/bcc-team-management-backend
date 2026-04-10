@@ -1,4 +1,5 @@
 import type { MiddlewareHandler, Next } from "hono";
+import { Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib/supabase.ts";
 import { uuidSchema } from "@/schemas/common.schema.ts";
@@ -44,7 +45,7 @@ export const requireYearAccess: MiddlewareHandler<AppContext> = async (
   const db = getSupabase();
 
   const { data: yearAccessData, error: yearAccessError } = await db
-    .from("year_access")
+    .from(Table.YearAccess)
     .select()
     .eq("user_id", profile.id)
     .eq("year_id", yearId)

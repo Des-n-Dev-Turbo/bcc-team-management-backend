@@ -1,3 +1,4 @@
+import { Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
 import { AppError } from "./error.ts";
@@ -12,7 +13,7 @@ export const validateTeamParticipants = async ({
   const db = getSupabase();
 
   const { data: yearData, error: yearError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id, is_locked")
     .eq("id", yearId)
     .maybeSingle();
@@ -42,9 +43,9 @@ export const validateTeamParticipants = async ({
   }
 
   const { data: teamMembershipData, error: teamMembershipError } = await db
-    .from("team_memberships")
+    .from(Table.TeamMemberships)
     .select(
-      "id, team_id, year_participants!inner(id, year_id), teams!inner(id, year_id)",
+      `id, team_id, ${Table.YearParticipants}!inner(id, year_id), ${Table.Teams}!inner(id, year_id)`,
     )
     .eq("id", membershipId)
     .maybeSingle();

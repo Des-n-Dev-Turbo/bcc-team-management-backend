@@ -1,6 +1,7 @@
 import { CsvParseStream } from "@std/csv/parse-stream";
 import { Hono } from "hono";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
+import { ParticipantRoutes } from "@/constants/routes.ts";
 import {
   loadProfile,
   requireRole,
@@ -31,7 +32,7 @@ import { getValidated, validate } from "@/utils/validate.ts";
 const yearsParticipantRouter = new Hono<AppContext>();
 
 yearsParticipantRouter.post(
-  "/",
+  ParticipantRoutes.AddYearParticipant,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -61,7 +62,7 @@ yearsParticipantRouter.post(
 );
 
 yearsParticipantRouter.post(
-  "/bulk",
+  ParticipantRoutes.AddYearParticipantBulk,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -103,7 +104,7 @@ yearsParticipantRouter.post(
 );
 
 yearsParticipantRouter.get(
-  "/",
+  ParticipantRoutes.GetYearParticipants,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Viewer),
@@ -135,7 +136,7 @@ yearsParticipantRouter.get(
 );
 
 yearsParticipantRouter.patch(
-  "/:participantId/ban",
+  ParticipantRoutes.Ban,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -162,7 +163,7 @@ yearsParticipantRouter.patch(
 );
 
 yearsParticipantRouter.patch(
-  "/:participantId/unban",
+  ParticipantRoutes.Unban,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -194,7 +195,7 @@ yearsParticipantRouter.patch(
 );
 
 yearsParticipantRouter.patch(
-  "/:participantId/disqualify",
+  ParticipantRoutes.Disqualify,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -209,7 +210,7 @@ yearsParticipantRouter.patch(
 );
 
 yearsParticipantRouter.patch(
-  "/:participantId/undisqualify",
+  ParticipantRoutes.Undisqualify,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),

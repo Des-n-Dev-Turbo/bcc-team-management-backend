@@ -1,3 +1,4 @@
+import { Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
 import type { Role } from "@/types";
@@ -18,7 +19,7 @@ export const getTeamYearParticipants = async ({
   const db = getSupabase();
 
   const { data: teamData } = await db
-    .from("teams")
+    .from(Table.Teams)
     .select("id")
     .eq("id", teamId)
     .eq("year_id", yearId)
@@ -35,11 +36,11 @@ export const getTeamYearParticipants = async ({
   });
 
   const { data: participantsData, error: participantsError } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .select(
-      "id, name, email, mobile, reg_id, banned, disqualified, team_memberships!inner(id, team_id, is_team_lead)",
+      `id, name, email, mobile, reg_id, banned, disqualified, ${Table.TeamMemberships}!inner(id, team_id, is_team_lead)`,
     )
-    .eq("team_memberships.team_id", teamData.id)
+    .eq(`${Table.TeamMemberships}.team_id`, teamData.id)
     .eq("year_id", yearId)
     .or("banned.eq.false,banned.is.null")
     .is("user_id", null)

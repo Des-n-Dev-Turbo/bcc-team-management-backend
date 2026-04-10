@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-
+import { ParticipantRoutes } from "@/constants/routes.ts";
 import {
   loadProfile,
   requireRole,
@@ -14,7 +14,7 @@ import { getValidated, validate } from "@/utils/validate.ts";
 const teamParticipantsRouter = new Hono<AppContext>();
 
 teamParticipantsRouter.get(
-  "/:teamId/participants",
+  ParticipantRoutes.GetTeamParticipants,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Viewer),

@@ -1,3 +1,4 @@
+import { Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
 import { Role } from "@/types";
@@ -21,7 +22,7 @@ export const addParticipantToTeam = async ({
   const db = getSupabase();
 
   const { data: yearData, error: yearError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id, is_locked")
     .eq("id", yearId)
     .maybeSingle();
@@ -51,7 +52,7 @@ export const addParticipantToTeam = async ({
   }
 
   const { data: yearParticipantData, error: yearParticipantError } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .select("id, year_id, user_id")
     .eq("id", participantId)
     .eq("year_id", yearData.id)
@@ -75,7 +76,7 @@ export const addParticipantToTeam = async ({
   }
 
   const { data: teamData, error: teamError } = await db
-    .from("teams")
+    .from(Table.Teams)
     .select("id")
     .eq("id", teamId)
     .eq("year_id", yearData.id)
@@ -109,7 +110,7 @@ export const addParticipantToTeam = async ({
   }
 
   const { data: teamMembershipData, error: teamMembershipError } = await db
-    .from("team_memberships")
+    .from(Table.TeamMemberships)
     .insert({
       team_id: teamData.id,
       year_participant_id: yearParticipantData.id,
@@ -147,7 +148,7 @@ export const removeParticipantFromTeam = async ({
   const { db } = await validateTeamParticipants({ yearId, membershipId });
 
   const { data: deletedData, error: deleteError } = await db
-    .from("team_memberships")
+    .from(Table.TeamMemberships)
     .delete()
     .eq("id", membershipId)
     .select()
@@ -193,7 +194,7 @@ export const transferParticipant = async ({
   }
 
   const { data: toTeamData, error: toTeamError } = await db
-    .from("teams")
+    .from(Table.Teams)
     .select("id, name, year_id")
     .eq("id", toTeamId)
     .eq("year_id", currentYearId)
@@ -216,7 +217,7 @@ export const transferParticipant = async ({
   }
 
   const { data: updatedData, error: updatedError } = await db
-    .from("team_memberships")
+    .from(Table.TeamMemberships)
     .update({ team_id: toTeamData.id, is_team_lead: false })
     .eq("id", membershipId)
     .select("id, team_id")

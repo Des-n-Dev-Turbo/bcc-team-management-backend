@@ -1,5 +1,5 @@
 import type * as zod from "@zod/zod";
-import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from "@/constants/common.ts";
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
 import { yearParticipantsSchema } from "@/schemas/year_participants.schema.ts";
@@ -39,7 +39,7 @@ export const addYearParticipant = async ({
   const db = getSupabase();
 
   const { data: fetchYear, error: fetchYearError } = await db
-    .from("years")
+    .from(Table.Years)
     .select()
     .eq("id", yearId)
     .maybeSingle();
@@ -68,7 +68,7 @@ export const addYearParticipant = async ({
 
   const { data: existingParticipant, error: existingParticipantError } =
     await db
-      .from("year_participants")
+      .from(Table.YearParticipants)
       .select("id, year_id, name, email, banned, disqualified")
       .eq("email", email)
       .order("created_at", { ascending: false })
@@ -109,7 +109,7 @@ export const addYearParticipant = async ({
   }
 
   const { data: insertedParticipant, error: insertError } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .insert({
       year_id: yearId,
       ...(userId ? { user_id: userId } : {}),
@@ -152,7 +152,7 @@ export const bulkAddYearParticipants = async ({
   const db = getSupabase();
 
   const { data: fetchYear, error: fetchYearError } = await db
-    .from("years")
+    .from(Table.Years)
     .select()
     .eq("id", yearId)
     .maybeSingle();
@@ -211,7 +211,7 @@ export const bulkAddYearParticipants = async ({
 
   const { data: existingParticipants, error: existingParticipantsError } =
     await db
-      .from("year_participants")
+      .from(Table.YearParticipants)
       .select("id, year_id, name, email, banned, disqualified")
       .in("email", validEmails)
       .order("created_at", { ascending: false });
@@ -311,7 +311,7 @@ export const bulkAddYearParticipants = async ({
   }
 
   const { data: insertedParticipants, error: insertError } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .insert(rowsToInsert)
     .select();
 
@@ -343,7 +343,7 @@ export const bulkAddYearParticipants = async ({
   // fallback — one by one
   for (const row of rowsToInsert) {
     const { data: inserted, error: rowError } = await db
-      .from("year_participants")
+      .from(Table.YearParticipants)
       .insert(row)
       .select()
       .single();
@@ -428,9 +428,9 @@ export const getYearsParticipants = async ({
   const sortAscending = filters.order !== "desc";
 
   let baseQuery = db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .select(
-      "id, name, email, mobile, reg_id, banned, disqualified, team_memberships(id, team_id, is_team_lead)",
+      `id, name, email, mobile, reg_id, banned, disqualified, ${Table.TeamMemberships}(id, team_id, is_team_lead)`,
       { count: "exact" },
     )
     .eq("year_id", yearId)
@@ -501,7 +501,7 @@ export const banParticipant = async ({
 
   const { data: fetchYearParticipant, error: fetchYearParticipantError } =
     await db
-      .from("year_participants")
+      .from(Table.YearParticipants)
       .select("id, user_id, banned")
       .eq("id", participantId)
       .eq("year_id", yearId)
@@ -529,7 +529,7 @@ export const banParticipant = async ({
   }
 
   const { data: profileData, error: profileError } = await db
-    .from("profiles")
+    .from(Table.Profiles)
     .select("id, global_role")
     .eq("id", fetchYearParticipant.user_id)
     .maybeSingle();
@@ -588,7 +588,7 @@ export const unbanParticipant = async ({
   const db = getSupabase();
 
   const { data: participantData, error: participantError } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .select("id, user_id, banned")
     .eq("id", participantId)
     .eq("year_id", yearId)
@@ -661,7 +661,7 @@ export const unbanParticipant = async ({
   }
 
   const { data: updatedRecord } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .select("id, year_id, name, mobile, email, user_id, reg_id, banned")
     .eq("id", participantId)
     .maybeSingle();
@@ -723,7 +723,7 @@ export const disqualifyParticipant = async ({
   const db = getSupabase();
 
   const { data: yearData, error: yearError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id, is_locked")
     .eq("id", yearId)
     .maybeSingle();
@@ -749,7 +749,7 @@ export const disqualifyParticipant = async ({
   }
 
   const { data: participantData, error: participantError } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .select(
       "id, year_id, name, mobile, email, reg_id, user_id, banned, disqualified",
     )
@@ -790,7 +790,7 @@ export const disqualifyParticipant = async ({
   }
 
   const { error: disqualifyParticipantError } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .update({ disqualified: true })
     .eq("id", participantId)
     .eq("year_id", yearId);
@@ -816,7 +816,7 @@ export const undisqualifyParticipant = async ({
   const db = getSupabase();
 
   const { data: yearData, error: yearError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id, is_locked")
     .eq("id", yearId)
     .maybeSingle();
@@ -842,7 +842,7 @@ export const undisqualifyParticipant = async ({
   }
 
   const { data: participantData, error: participantError } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .select(
       "id, year_id, name, mobile, email, reg_id, user_id, banned, disqualified",
     )
@@ -875,7 +875,7 @@ export const undisqualifyParticipant = async ({
   }
 
   const { error: undisqualifyParticipantError } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .update({ disqualified: false })
     .eq("id", participantId)
     .eq("year_id", yearId);
@@ -895,7 +895,7 @@ export const getTeamLeadsForYear = async (yearId: string) => {
   const db = getSupabase();
 
   const { data: yearsData, error: yearsError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id")
     .eq("id", yearId)
     .maybeSingle();
@@ -913,9 +913,9 @@ export const getTeamLeadsForYear = async (yearId: string) => {
   }
 
   const { data: teamLeadsData, error: teamLeadsError } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .select(
-      "id, name, email, mobile, reg_id, user_id, banned, team_memberships(id, team_id, is_team_lead)",
+      `id, name, email, mobile, reg_id, user_id, banned, ${Table.TeamMemberships}(id, team_id, is_team_lead)`,
     )
     .eq("year_id", yearsData.id)
     .not("user_id", "is", null);

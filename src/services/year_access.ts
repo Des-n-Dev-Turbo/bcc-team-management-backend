@@ -1,4 +1,4 @@
-import { MAX_YEAR_REQUEST_ATTEMPTS } from "@/constants/common.ts";
+import { MAX_YEAR_REQUEST_ATTEMPTS, Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
 import {
@@ -20,7 +20,7 @@ export const requestYearAccess = async ({
   const db = getSupabase();
 
   const { data: yearData, error: yearError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id, name, is_locked")
     .eq("id", yearId)
     .maybeSingle();
@@ -46,7 +46,7 @@ export const requestYearAccess = async ({
   }
 
   const { data: yearAccessData, error: yearAccessError } = await db
-    .from("year_access")
+    .from(Table.YearAccess)
     .select("id, user_id, year_id, status")
     .eq("user_id", userId)
     .eq("year_id", yearData.id)
@@ -93,7 +93,7 @@ export const requestYearAccess = async ({
   }
 
   const { data: requestData, error: requestError } = await db
-    .from("year_access")
+    .from(Table.YearAccess)
     .insert({
       user_id: userId,
       year_id: yearData.id,
@@ -123,7 +123,7 @@ export const updateYearAccess = async ({
   const db = getSupabase();
 
   const { data: yearAccessData, error: yearAccessError } = await db
-    .from("year_access")
+    .from(Table.YearAccess)
     .select("id, user_id, year_id, status")
     .eq("id", id)
     .order("created_at", { ascending: false })
@@ -154,7 +154,7 @@ export const updateYearAccess = async ({
   }
 
   const { data: updateAccessData, error: updateAccessError } = await db
-    .from("year_access")
+    .from(Table.YearAccess)
     .update({ status })
     .eq("id", yearAccessData.id)
     .select("id, user_id, year_id, status")
@@ -177,7 +177,7 @@ export const getYearAccessRequests = async ({ yearId }: { yearId: string }) => {
   const db = getSupabase();
 
   const { data: yearsAccessData, error: yearsAccessError } = await db
-    .from("year_access")
+    .from(Table.YearAccess)
     .select("id, user_id, year_id, status, created_at")
     .eq("year_id", yearId)
     .order("created_at", {

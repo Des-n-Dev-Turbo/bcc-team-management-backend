@@ -586,6 +586,15 @@ See `src/constants/error-codes.ts` for full list. Key ones:
 - Participants service design — privacy masking, shared utilities, pagination strategy
 - Participant listing design — filtering, sorting, role-based param enforcement, filter method (ilike contains)
 - Role promotion/demotion flows — all scenarios designed and locked
+- `Table` enum added to `src/constants/common.ts` — all DB table names centralised
+- Route segment constants added to `src/constants/routes.ts` — `YearRoutes`, `TeamRoutes`, `TeamMembershipRoutes`, `YearAccessRoutes`, `ProfileRoutes`, `ParticipantRoutes`
+- All services refactored to use `Table.X` instead of hardcoded strings
+- All routes refactored to use route constants instead of hardcoded segments
+- Biome v2.4.11 configured — `biome.json` with double quotes, 2 space indent, recommended rules
+- Git pre-commit hook set up — runs `biome check --write`, stages auto-formatted files
+- VSCode settings configured for Biome as default formatter with format on save
+- `DEFAULT_PAGE`, `DEFAULT_PAGE_SIZE`, `PERMANENT_BAN_DURATION` constants added to `common.ts`
+- `YearParticipantRecord` type added to `year_participants.ts` — replaces `any` in ban/unban result types
 - Zod schemas — `getYearParticipantsQuerySchema`, `getTeamParticipantsParamsSchema` added to `year_participants.schema.ts`
 - Shared utilities — `getRequesterTeam`, `applyPrivacyMask` built in `src/utils/participants.ts`
 - `getYearParticipants` service — built in `src/services/year_participants.ts` (`.is('user_id', null)` applied — volunteers only)
@@ -795,18 +804,18 @@ See `src/constants/error-codes.ts` for full list. Key ones:
 5. Tasks and scoring
 6. Leaderboard
 7. Testing suite
-8. Team memberships — move participant between teams (score transfer)
-9. Team memberships — demote team lead to regular member within same team
-10. Remove year access endpoint with cascade cleanup
-11. Role promotion/demotion dashboard endpoints
-12. Tasks and scoring (including `GET /years/:yearId/teams/:teamId/scores`)
-13. Leaderboard
-14. Testing suite
-15. Team memberships — assign participant to team
-16. Team memberships — move participant between teams (score transfer)
-17. Team memberships — demote team lead to regular member within same team
-18. Remove year access endpoint with cascade cleanup
-19. Role promotion/demotion dashboard endpoints
-20. Tasks and scoring (including `GET /years/:yearId/teams/:teamId/scores`)
-21. Leaderboard
-22. Testing suite
+2. Team memberships — move participant between teams (score transfer)
+3. Team memberships — demote team lead to regular member within same team
+4. Remove year access endpoint with cascade cleanup
+5. Role promotion/demotion dashboard endpoints
+6. Tasks and scoring (including `GET /years/:yearId/teams/:teamId/scores`)
+7. Leaderboard
+8. Testing suite
+4. Team memberships — assign participant to team
+5. Team memberships — move participant between teams (score transfer)
+6. Team memberships — demote team lead to regular member within same team
+7. Remove year access endpoint with cascade cleanup
+8. Role promotion/demotion dashboard endpoints
+9. Tasks and scoring (including `GET /years/:yearId/teams/:teamId/scores`)
+10. Leaderboard
+11. Testing suite

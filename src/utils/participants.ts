@@ -1,4 +1,4 @@
-import { PERMANENT_BAN_DURATION } from "@/constants/common.ts";
+import { PERMANENT_BAN_DURATION, Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
 import { type ParticipantBanResult, Role } from "@/types";
@@ -25,8 +25,8 @@ export const getRequesterTeam = async ({
     const db = getSupabase();
 
     const { data, error } = await db
-      .from("year_participants")
-      .select("team_memberships(team_id, is_team_lead)")
+      .from(Table.YearParticipants)
+      .select(`${Table.TeamMemberships}(team_id, is_team_lead)`)
       .eq("year_id", yearId)
       .eq("user_id", userId)
       .maybeSingle();
@@ -99,7 +99,7 @@ export const banVolunteer = async ({
 
   // Fetch updated record for response
   const { data } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .select("id, year_id, name, mobile, email, user_id, reg_id, banned")
     .eq("id", participantId)
     .single();
@@ -146,7 +146,7 @@ export const banTeamLead = async ({
   }
 
   const { data } = await db
-    .from("year_participants")
+    .from(Table.YearParticipants)
     .select("id, year_id, name, mobile, email, user_id, reg_id, banned")
     .eq("id", participantId)
     .single();

@@ -1,5 +1,4 @@
 import type { MiddlewareHandler, Next } from "hono";
-
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { type AppContext, hasRequiredRole, type Role } from "@/types";
 import { AppError } from "@/utils/error.ts";

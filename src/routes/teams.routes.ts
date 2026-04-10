@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-
+import { TeamRoutes } from "@/constants/routes.ts";
 import { loadProfile, requireRole, supabaseAuth } from "@/middleware";
 import {
   createTeamSchema,
@@ -20,7 +20,7 @@ import { getValidated, validate } from "@/utils/validate.ts";
 const router = new Hono<AppContext>();
 
 router.post(
-  "/create",
+  TeamRoutes.CreateTeam,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -36,7 +36,7 @@ router.post(
 );
 
 router.get(
-  "/",
+  TeamRoutes.GetTeams,
   supabaseAuth,
   loadProfile,
   validate("query", getTeamsSchema),
@@ -50,7 +50,7 @@ router.get(
 );
 
 router.patch(
-  "/:teamId",
+  TeamRoutes.EditTeamById,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -67,7 +67,7 @@ router.patch(
 );
 
 router.post(
-  "/year/:yearId/copy",
+  TeamRoutes.CopyTeams,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),

@@ -1,3 +1,4 @@
+import { Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib/supabase.ts";
 import { Role } from "@/types/role.ts";
@@ -15,7 +16,7 @@ export const bootstrapProfile = async ({
   const db = getSupabase();
 
   const { data: existingProfile, error: fetchError } = await db
-    .from("profiles")
+    .from(Table.Profiles)
     .select("id, global_role")
     .eq("id", userId)
     .maybeSingle();
@@ -29,12 +30,12 @@ export const bootstrapProfile = async ({
   }
 
   if (existingProfile) {
-    await db.from("profiles").update({ name, email }).eq("id", userId);
+    await db.from(Table.Profiles).update({ name, email }).eq("id", userId);
     return existingProfile;
   }
 
   const { data: newProfile, error: insertError } = await db
-    .from("profiles")
+    .from(Table.Profiles)
     .insert({
       id: userId,
       global_role: Role.Viewer,

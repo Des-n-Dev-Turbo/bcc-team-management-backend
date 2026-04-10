@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-
+import { YearAccessRoutes } from "@/constants/routes.ts";
 import { loadProfile, requireRole, supabaseAuth } from "@/middleware";
 import {
   approveRejectYearAccessSchema,
@@ -16,7 +16,7 @@ import { getValidated, validate } from "@/utils/validate.ts";
 const router = new Hono<AppContext>();
 
 router.post(
-  "/",
+  YearAccessRoutes.RequestAccess,
   supabaseAuth,
   loadProfile,
   validate("query", requestYearAccessSchema),
@@ -39,7 +39,7 @@ router.post(
 );
 
 router.patch(
-  "/:id/approve",
+  YearAccessRoutes.Approve,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -63,7 +63,7 @@ router.patch(
 );
 
 router.patch(
-  "/:id/reject",
+  YearAccessRoutes.Reject,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -87,7 +87,7 @@ router.patch(
 );
 
 router.get(
-  "/",
+  YearAccessRoutes.GetAccessRequests,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),

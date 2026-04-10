@@ -1,7 +1,6 @@
-import { MAX_YEAR_REQUEST_ATTEMPTS } from "@/constants/common.ts";
+import { MAX_YEAR_REQUEST_ATTEMPTS, Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib/supabase.ts";
-
 import { hasRequiredRole, Role, YearAccessStatus } from "@/types";
 import { AppError } from "@/utils/error.ts";
 
@@ -15,7 +14,7 @@ export const createYear = async ({
   const db = getSupabase();
 
   const { data: fetchUnlockedYears, error: fetchUnlockedYearsError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id, name, year")
     .or("is_locked.eq.false,is_locked.is.null");
 
@@ -39,7 +38,7 @@ export const createYear = async ({
   }
 
   const { data: newYear, error: insertError } = await db
-    .from("years")
+    .from(Table.Years)
     .insert({
       name,
       year,
@@ -65,7 +64,7 @@ export const createYear = async ({
   }
 
   const { data: previousYear } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id")
     .neq("id", newYear.id)
     .order("created_at", { ascending: false })
@@ -79,7 +78,7 @@ export const lockYear = async (year: string) => {
   const db = getSupabase();
 
   const { data: fetchYear, error: fetchError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id, is_locked")
     .eq("id", year)
     .maybeSingle();
@@ -105,7 +104,7 @@ export const lockYear = async (year: string) => {
   }
 
   const { data: lockedYear, error: lockedYearError } = await db
-    .from("years")
+    .from(Table.Years)
     .update({ is_locked: true })
     .eq("id", year)
     .select("id, is_locked, name, year")
@@ -132,7 +131,7 @@ export const getYears = async ({
   const db = getSupabase();
 
   const { data: years, error: yearsError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id, name, year, is_locked");
 
   if (yearsError) {
@@ -156,7 +155,7 @@ export const getYears = async ({
   }
 
   const { data: yearAccessData, error: yearAccessError } = await db
-    .from("year_access")
+    .from(Table.YearAccess)
     .select()
     .eq("user_id", userId)
     .order("created_at", { ascending: false });

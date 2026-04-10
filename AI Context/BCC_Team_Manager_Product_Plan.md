@@ -214,6 +214,9 @@ viewer < user < admin < superadmin
 ## 5. Implementation Plan
 
 ### Phase 1 — Core Infrastructure ✅ DONE
+- Biome linting/formatting configured
+- Git pre-commit hooks set up
+- Table enum and route constants centralised
 
 - Auth middleware (supabaseAuth, loadProfile, requireRole)
 - Error handling (AppError, global handler, error codes)

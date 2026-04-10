@@ -1,4 +1,5 @@
 import type { MiddlewareHandler, Next } from "hono";
+import { Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
 import type { AppContext } from "@/types";
@@ -17,7 +18,7 @@ export const loadProfile: MiddlewareHandler<AppContext> = async (
   const db = getSupabase();
 
   const { data, error } = await db
-    .from("profiles")
+    .from(Table.Profiles)
     .select("id, global_role")
     .eq("id", userId)
     .maybeSingle();

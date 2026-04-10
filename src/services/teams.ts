@@ -1,3 +1,4 @@
+import { Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
 import { AppError } from "@/utils/error.ts";
@@ -6,7 +7,7 @@ export const createTeam = async (teamName: string, yearId: string) => {
   const db = getSupabase();
 
   const { data: yearData, error: yearError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id, is_locked")
     .eq("id", yearId)
     .maybeSingle();
@@ -36,7 +37,7 @@ export const createTeam = async (teamName: string, yearId: string) => {
   }
 
   const { data: createdTeam, error: createTeamError } = await db
-    .from("teams")
+    .from(Table.Teams)
     .insert({
       name: teamName,
       year_id: yearData.id,
@@ -67,7 +68,7 @@ export const getTeamsByYear = async (yearId: string) => {
   const db = getSupabase();
 
   const { data: teamsData, error: teamsError } = await db
-    .from("teams")
+    .from(Table.Teams)
     .select("id, name")
     .eq("year_id", yearId)
     .order("name", { ascending: true });
@@ -91,7 +92,7 @@ export const updateTeamName = async (teamId: string, newName: string) => {
   const db = getSupabase();
 
   const { data: teamData, error: teamError } = await db
-    .from("teams")
+    .from(Table.Teams)
     .select("id, name, year_id")
     .eq("id", teamId)
     .maybeSingle();
@@ -109,7 +110,7 @@ export const updateTeamName = async (teamId: string, newName: string) => {
   }
 
   const { data: yearData, error: yearError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id, is_locked")
     .eq("id", teamData.year_id)
     .maybeSingle();
@@ -143,7 +144,7 @@ export const updateTeamName = async (teamId: string, newName: string) => {
   }
 
   const { data: updatedTeam, error: updateError } = await db
-    .from("teams")
+    .from(Table.Teams)
     .update({ name: newName })
     .eq("id", teamId)
     .select("id, name, year_id")
@@ -178,7 +179,7 @@ export const copyTeamsToYear = async ({
   const db = getSupabase();
 
   const { data: yearData, error: yearError } = await db
-    .from("years")
+    .from(Table.Years)
     .select("id, is_locked")
     .eq("id", yearId)
     .maybeSingle();
@@ -208,7 +209,7 @@ export const copyTeamsToYear = async ({
   }
 
   const { data: previousYearTeamsData, error: previousYearTeamsError } =
-    await db.from("teams").select("id, year_id, name").in("id", teamIds);
+    await db.from(Table.Teams).select("id, year_id, name").in("id", teamIds);
 
   if (previousYearTeamsError) {
     throw new AppError(
@@ -227,7 +228,7 @@ export const copyTeamsToYear = async ({
   }
 
   const { data: currentYearTeamsData, error: currentYearTeamsError } = await db
-    .from("teams")
+    .from(Table.Teams)
     .select("id, name")
     .eq("year_id", yearId);
 
@@ -256,7 +257,7 @@ export const copyTeamsToYear = async ({
   }
 
   const { data: insertedTeams, error: insertError } = await db
-    .from("teams")
+    .from(Table.Teams)
     .insert(teamsToInsert)
     .select("id, name, year_id");
 

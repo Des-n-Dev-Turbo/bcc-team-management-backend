@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-
+import { YearRoutes } from "@/constants/routes.ts";
 import { loadProfile, requireRole, supabaseAuth } from "@/middleware";
 import { yearParticipantsParamsSchema } from "@/schemas/year_participants.schema.ts";
 import { createYearSchema, lockYearSchema } from "@/schemas/years.schema.ts";
@@ -10,6 +10,7 @@ import {
   lockYear,
 } from "@/services";
 import { type AppContext, Role } from "@/types";
+
 import { getValidated, validate } from "@/utils/validate.ts";
 import teamParticipantsRouter from "./team_participants.routes.ts";
 import yearsParticipantRouter from "./year_participants.routes.ts";
@@ -17,7 +18,7 @@ import yearsParticipantRouter from "./year_participants.routes.ts";
 const router = new Hono<AppContext>();
 
 router.post(
-  "/",
+  YearRoutes.CreateYear,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Superadmin),
@@ -31,7 +32,7 @@ router.post(
 );
 
 router.post(
-  "/:yearId/lock",
+  YearRoutes.Lock,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -43,7 +44,7 @@ router.post(
   },
 );
 
-router.get("/", supabaseAuth, loadProfile, async (c) => {
+router.get(YearRoutes.GetYears, supabaseAuth, loadProfile, async (c) => {
   const userId = c.get("userId");
 
   const profile = c.get("profile");
@@ -54,7 +55,7 @@ router.get("/", supabaseAuth, loadProfile, async (c) => {
 });
 
 router.get(
-  "/:yearId/team-leads",
+  YearRoutes.GetTeamLeads,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -68,8 +69,8 @@ router.get(
   },
 );
 
-router.route("/:yearId/participants", yearsParticipantRouter);
+router.route(YearRoutes.Participants, yearsParticipantRouter);
 
-router.route("/:yearId/teams", teamParticipantsRouter);
+router.route(YearRoutes.TeamParticipants, teamParticipantsRouter);
 
 export default router;

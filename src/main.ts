@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
+import * as ROUTES from "@/constants/routes.ts";
 import profileRoutes from "@/routes/profile.routes.ts";
 import teamMembershipsRouter from "@/routes/team_memberships.routes.ts";
 import teamRoutes from "@/routes/teams.routes.ts";
@@ -10,15 +11,15 @@ import { AppError, getErrorMessage } from "@/utils/error.ts";
 
 const app = new Hono<AppContext>();
 
-app.route("/profile", profileRoutes);
+app.route(ROUTES.ProfileRoutes.Base, profileRoutes);
 
-app.route("/teams", teamRoutes);
+app.route(ROUTES.TeamRoutes.Base, teamRoutes);
 
-app.route("/years", yearRoutes);
+app.route(ROUTES.YearRoutes.Base, yearRoutes);
 
-app.route("/year-access", yearAccessRouter);
+app.route(ROUTES.YearAccessRoutes.Base, yearAccessRouter);
 
-app.route("/team_memberships", teamMembershipsRouter);
+app.route(ROUTES.TeamMembershipRoutes.Base, teamMembershipsRouter);
 
 app.onError((error, c) => {
   console.log(getErrorMessage(error));

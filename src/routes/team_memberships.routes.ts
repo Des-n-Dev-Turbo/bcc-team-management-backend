@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { TeamMembershipRoutes } from "@/constants/routes.ts";
 import {
   loadProfile,
   requireRole,
@@ -24,7 +25,7 @@ import { getValidated, validate } from "@/utils/validate.ts";
 const router = new Hono<AppContext>();
 
 router.post(
-  "/",
+  TeamMembershipRoutes.AddParticipant,
   supabaseAuth,
   loadProfile,
   requireRole(Role.User),
@@ -54,7 +55,7 @@ router.post(
 );
 
 router.delete(
-  "/:membershipId",
+  TeamMembershipRoutes.RemoveById,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
@@ -80,7 +81,7 @@ router.delete(
 );
 
 router.patch(
-  "/transfer",
+  TeamMembershipRoutes.Transfer,
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-
+import { ProfileRoutes } from "@/constants/routes.ts";
 import { loadProfile, supabaseAuth } from "@/middleware";
 import { bootstrapProfile } from "@/services";
 
@@ -7,7 +7,7 @@ import type { AppContext } from "@/types";
 
 const router = new Hono<AppContext>();
 
-router.post("/bootstrap", supabaseAuth, async (c) => {
+router.post(ProfileRoutes.BootstrapProfile, supabaseAuth, async (c) => {
   const userId = c.get("userId");
 
   const name = c.get("name");
@@ -17,7 +17,7 @@ router.post("/bootstrap", supabaseAuth, async (c) => {
   return c.json(profile);
 });
 
-router.get("/me", supabaseAuth, loadProfile, async (c) => {
+router.get(ProfileRoutes.Me, supabaseAuth, loadProfile, async (c) => {
   const profile = c.get("profile");
   const name = c.get("name");
   const email = c.get("email");
