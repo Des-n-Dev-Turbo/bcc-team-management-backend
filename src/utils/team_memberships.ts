@@ -274,11 +274,7 @@ export const validateTeamLeadConstraint = ({
   teamLead: PromotionContext["teamLead"];
   participantId: string;
 }) => {
-  if (
-    teamLead &&
-    teamLead.id &&
-    teamLead.year_participant_id !== participantId
-  ) {
+  if (teamLead?.id && teamLead.year_participant_id !== participantId) {
     throw new AppError(
       "Team Lead already exists for this team",
       ERROR_CODES.TEAM_LEAD_ALREADY_EXISTS,

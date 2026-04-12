@@ -1,3 +1,5 @@
+import type { Role } from "./role.ts";
+
 type YearAccessRecord = {
   id: string;
   status: string;
@@ -26,7 +28,7 @@ export type PromotionContext = {
     is_team_lead: boolean;
   } | null;
   profile: {
-    id: any;
-    global_role: any;
+    id: string;
+    global_role: Role;
   } | null;
 };

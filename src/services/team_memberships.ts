@@ -289,13 +289,13 @@ export const promoteToTeamLead = async ({
   validateParticipantForPromotion({
     participant: promotionContext.participant,
     profile: promotionContext.profile,
-  }),
-    validateYearAccess({ participant: promotionContext.participant }),
-    validateTeamMembership({ participant: promotionContext.participant }),
-    validateTeamLeadConstraint({
-      participantId: promotionContext.participant?.id ?? participantId,
-      teamLead: promotionContext.teamLead,
-    });
+  });
+  validateYearAccess({ participant: promotionContext.participant });
+  validateTeamMembership({ participant: promotionContext.participant });
+  validateTeamLeadConstraint({
+    participantId: promotionContext.participant?.id ?? participantId,
+    teamLead: promotionContext.teamLead,
+  });
 
   const { data: teamLeadData, error: teamLeadError } = await db
     .from(Table.TeamMemberships)
