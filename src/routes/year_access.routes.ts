@@ -3,10 +3,13 @@ import { YearAccessRoutes } from "@/constants/routes.ts";
 import { loadProfile, requireRole, supabaseAuth } from "@/middleware";
 import {
   approveRejectYearAccessSchema,
+  deleteYearAccessParamsSchema,
+  deleteYearAccessQuerySchema,
   requestYearAccessSchema,
 } from "@/schemas/year_access.schema.ts";
 import {
   getYearAccessRequests,
+  removeYearAccess,
   requestYearAccess,
   updateYearAccess,
 } from "@/services";
@@ -98,6 +101,31 @@ router.get(
     const result = await getYearAccessRequests({ yearId });
 
     return c.json(result, 200);
+  },
+);
+
+router.delete(
+  YearAccessRoutes.Remove,
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate("param", deleteYearAccessParamsSchema),
+  validate("query", deleteYearAccessQuerySchema),
+  async (c) => {
+    const { userId } = getValidated(c, "param", deleteYearAccessParamsSchema);
+
+    const { yearId } = getValidated(c, "query", deleteYearAccessQuerySchema);
+
+    const result = await removeYearAccess({ yearId, userId });
+
+    return c.json(
+      {
+        message: result
+          ? "Year access removed successfully"
+          : "Year Participant was not found, Year access removed successfully",
+      },
+      200,
+    );
   },
 );
 

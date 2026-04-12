@@ -517,6 +517,12 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 - `validateTeamParticipants` updated — now also returns `isTeamLead` field
 - Pure validators — `validateParticipantForPromotion`, `validateYearAccess`, `validateTeamMembership`, `validateTeamLeadConstraint`
 - `promoteToTeamLead` service — year lock check, getPromotionContext, sequential validators, sets `is_team_lead = true`
+- `removeYearAccess` service — rejects year_access first, then if role=user: deletes team_membership + year_participant
+  - Admin/superadmin cannot have their access removed via this endpoint (403)
+  - Viewer: only year_access rejected
+  - User (team lead): year_access rejected + team_membership deleted + year_participant deleted
+  - Rejection counts toward MAX_YEAR_REQUEST_ATTEMPTS — intentional lockout mechanism
+- `DELETE /year-access/:userId?yearId=xxx` route built — admin+
 - `demoteFromTeamLead` service — validateTeamParticipants, isTeamLead check, sets `is_team_lead = false`
 - `PATCH /team-memberships/:membershipId/promote?yearId=xxx` route — admin+, body: `{ participantId, teamId }`
 - `PATCH /team-memberships/:membershipId/demote?yearId=xxx` route — admin+, body: `{ teamId }`
@@ -531,8 +537,11 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 
 ## 14. What's Next (in order)
 
-1. Remove year access endpoint with cascade cleanup
-2. Role promotion/demotion dashboard endpoints
+1. `GET /year-access/users?yearId=xxx` — list all approved year access users (admin+)
+   - 3 calls: approved year_access + profiles (`.in`) + listUsers — merged in memory
+   - Returns: name, email (Auth API), global_role (profiles), year_access id
+   - Excludes banned users
+2. Role promotion/demotion dashboard endpoints (`/roles`)
 3. Tasks and scoring
 4. Leaderboard
 5. Testing suite

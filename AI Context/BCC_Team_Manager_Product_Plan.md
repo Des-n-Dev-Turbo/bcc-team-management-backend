@@ -69,7 +69,8 @@ viewer < user < admin < superadmin
 - [x] Admin approves request (grants viewer access)
 - [x] Admin rejects request
 - [x] Max 3 requests per user per year
-- [ ] Remove year access (admin+) — removes year_access, team_membership, year_participant for that year
+- [x] Remove year access (admin+) — `DELETE /year-access/:userId?yearId=xxx`, rejects year_access + cascade cleanup for team leads
+- [ ] List all approved year access users — `GET /year-access/users?yearId=xxx` (admin+, excludes banned)
 - [ ] Notify user via email on approve/reject (Brevo)
 
 ### 4.3a Role Promotion & Demotion (separate dashboard, outside year context)
@@ -387,7 +388,7 @@ viewer < user < admin < superadmin
 
 ## 9. What's Next (Immediate)
 
-1. Remove year access endpoint with cascade cleanup
+1. `GET /year-access/users?yearId=xxx` — list all approved year access users (admin+)
 2. Role promotion/demotion dashboard endpoints
 3. Tasks and scoring
 4. Leaderboard

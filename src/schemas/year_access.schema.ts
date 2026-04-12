@@ -9,3 +9,9 @@ export const requestYearAccessSchema = zod.object({
 export const approveRejectYearAccessSchema = zod.object({
   id: uuidSchema,
 });
+
+export const deleteYearAccessParamsSchema = zod.object({
+  userId: uuidSchema,
+});
+
+export const deleteYearAccessQuerySchema = requestYearAccessSchema;

@@ -2,6 +2,7 @@ import { MAX_YEAR_REQUEST_ATTEMPTS, Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
 import {
+  Role,
   type YearAccessEntry,
   type YearAccessPendingEntry,
   type YearAccessRejectedEntry,
@@ -300,4 +301,130 @@ export const getYearAccessRequests = async ({ yearId }: { yearId: string }) => {
     approved: approvedRequests,
     rejected: rejectedRequests,
   } as YearAccessRequestsResult;
+};
+
+export const removeYearAccess = async ({
+  yearId,
+  userId,
+}: {
+  yearId: string;
+  userId: string;
+}) => {
+  const db = getSupabase();
+
+  const [yearAccessCall, profilesCall] = await Promise.all([
+    db
+      .from(Table.YearAccess)
+      .select("id, year_id, user_id, status")
+      .eq("year_id", yearId)
+      .eq("user_id", userId)
+      .eq("status", YearAccessStatus.APPROVED)
+      .maybeSingle(),
+    db
+      .from(Table.Profiles)
+      .select("id, global_role")
+      .eq("id", userId)
+      .maybeSingle(),
+  ]);
+
+  if (yearAccessCall.error) {
+    throw new AppError(
+      "Unable to fetch Year Access",
+      ERROR_CODES.YEAR_ACCESS_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (profilesCall.error) {
+    throw new AppError(
+      "Fetching Profile failed",
+      ERROR_CODES.PROFILE_LOOKUP_FAILED,
+      500,
+    );
+  }
+
+  if (!profilesCall.data) {
+    throw new AppError("Profile not found", ERROR_CODES.PROFILE_NOT_FOUND, 404);
+  }
+
+  if (!yearAccessCall.data) {
+    throw new AppError(
+      "Year Access data not found",
+      ERROR_CODES.YEAR_ACCESS_REQUEST_NOT_AVAILABLE,
+      404,
+    );
+  }
+
+  const userRole = profilesCall.data.global_role;
+
+  if (userRole === Role.Admin || userRole === Role.Superadmin) {
+    throw new AppError("Wrong Profile Selected", ERROR_CODES.FORBIDDEN, 403);
+  }
+
+  const { error: updateError } = await db
+    .from(Table.YearAccess)
+    .update({ status: YearAccessStatus.REJECTED })
+    .eq("id", yearAccessCall.data.id);
+
+  if (updateError) {
+    throw new AppError(
+      "Year access removal failed",
+      ERROR_CODES.YEAR_ACCESS_REQUEST_REJECT_FAILED,
+      500,
+    );
+  }
+
+  if (userRole === Role.Viewer) {
+    return true;
+  }
+
+  const { data: yearParticipantData, error: yearParticipantError } = await db
+    .from(Table.YearParticipants)
+    .select(`id, email, year_id, user_id, ${Table.TeamMemberships}(id)`)
+    .eq("user_id", profilesCall.data.id)
+    .eq("year_id", yearAccessCall.data.year_id)
+    .maybeSingle();
+
+  if (yearParticipantError) {
+    throw new AppError(
+      "Year Participant details fetch failed",
+      ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!yearParticipantData) {
+    if (userRole === Role.User) {
+      return true;
+    }
+    return false;
+  }
+
+  if (yearParticipantData.team_memberships?.[0]?.id) {
+    const { error } = await db
+      .from(Table.TeamMemberships)
+      .delete()
+      .eq("id", yearParticipantData.team_memberships[0].id);
+
+    if (error)
+      throw new AppError(
+        "Team membership deletion failed",
+        ERROR_CODES.TEAM_MEMBERSHIP_UPDATE_FAILED,
+        500,
+      );
+  }
+
+  const { error: participantDeleteError } = await db
+    .from(Table.YearParticipants)
+    .delete()
+    .eq("id", yearParticipantData.id);
+
+  if (participantDeleteError)
+    throw new AppError(
+      "Participant Deletion Failed",
+      ERROR_CODES.YEAR_PARTICIPANT_DELETION_FAILED,
+      500,
+    );
+
+  return true;
 };
