@@ -512,13 +512,14 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 - `validateTeamParticipants` shared utility in `src/utils/team_memberships.ts`
 - `removeParticipantFromTeam` service + `DELETE /team-memberships/:membershipId?yearId=xxx` route
 - `transferParticipant` service + `PATCH /team-memberships/transfer?yearId=xxx` route
-- New error codes added to `error-codes.ts`: `TEAM_LEAD_ALREADY_EXISTS`, `USER_NOT_REGISTERED`, `YEAR_ACCESS_NOT_APPROVED`, `NOT_A_TEAM_LEAD`
-- `getPromotionContext` utility built in `src/utils/team_memberships.ts`
-  - 2 parallel queries: year_participants (with year_access + team_memberships left joins) + team_memberships for teamId
-  - year_access filtered by yearId + status = approved
-  - team_memberships join scoped to teamId
-  - Returns `PromotionContext` type: `{ participant: PromotionParticipant | null, teamLead: TeamLeadRecord | null }`
-  - Supabase returns joined tables as arrays — validators access `year_access[0]` and `team_memberships[0]`
+- New error codes: `TEAM_LEAD_ALREADY_EXISTS`, `USER_NOT_REGISTERED`, `YEAR_ACCESS_NOT_APPROVED`, `NOT_A_TEAM_LEAD`, `TEAM_MEMBERSHIP_UPDATE_FAILED`
+- `getPromotionContext` utility — 2 parallel queries + sequential profile fetch if user_id exists, returns `PromotionContext`
+- `validateTeamParticipants` updated — now also returns `isTeamLead` field
+- Pure validators — `validateParticipantForPromotion`, `validateYearAccess`, `validateTeamMembership`, `validateTeamLeadConstraint`
+- `promoteToTeamLead` service — year lock check, getPromotionContext, sequential validators, sets `is_team_lead = true`
+- `demoteFromTeamLead` service — validateTeamParticipants, isTeamLead check, sets `is_team_lead = false`
+- `PATCH /team-memberships/:membershipId/promote?yearId=xxx` route — admin+, body: `{ participantId, teamId }`
+- `PATCH /team-memberships/:membershipId/demote?yearId=xxx` route — admin+, body: `{ teamId }`
 
 ### Supabase RPC Functions
 
@@ -530,15 +531,8 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 
 ## 14. What's Next (in order)
 
-1. Implement pure validator functions in `src/utils/team_memberships.ts`:
-   - `validateParticipantForPromotion(ctx)` — checks exists, not banned, has user_id
-   - `validateYearAccess(ctx)` — checks approved year_access
-   - `validateTeamMembership(ctx)` — checks participant is in teamId
-   - `validateTeamLeadConstraint(ctx)` — checks no lead already exists
-2. `promoteToTeamLead` service + `PATCH /team-memberships/:membershipId/promote?yearId=xxx` route
-3. `demoteTeamLead` service + `PATCH /team-memberships/:membershipId/demote?yearId=xxx` route
-4. Remove year access endpoint with cascade cleanup
-5. Role promotion/demotion dashboard endpoints
-6. Tasks and scoring
-7. Leaderboard
-8. Testing suite
+1. Remove year access endpoint with cascade cleanup
+2. Role promotion/demotion dashboard endpoints
+3. Tasks and scoring
+4. Leaderboard
+5. Testing suite

@@ -1,7 +1,12 @@
 import { Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
-import { type PromotionContext, YearAccessStatus } from "@/types";
+import {
+  type PromotionContext,
+  type PromotionParticipant,
+  Role,
+  YearAccessStatus,
+} from "@/types";
 import { AppError } from "./error.ts";
 
 export const validateTeamParticipants = async ({
@@ -46,7 +51,7 @@ export const validateTeamParticipants = async ({
   const { data: teamMembershipData, error: teamMembershipError } = await db
     .from(Table.TeamMemberships)
     .select(
-      `id, team_id, ${Table.YearParticipants}!inner(id, year_id), ${Table.Teams}!inner(id, year_id)`,
+      `id, team_id, is_team_lead, ${Table.YearParticipants}!inner(id, year_id), ${Table.Teams}!inner(id, year_id)`,
     )
     .eq("id", membershipId)
     .maybeSingle();
@@ -71,6 +76,7 @@ export const validateTeamParticipants = async ({
     id: string;
     year_participants: { id: string; year_id: string };
     teams: { id: string; year_id: string };
+    is_team_lead: boolean | null;
   }
 
   // Then use a single cast:
@@ -91,6 +97,7 @@ export const validateTeamParticipants = async ({
     currentTeamId: membership?.teams.id,
     yearId: membership?.year_participants.year_id,
     db,
+    isTeamLead: membership?.is_team_lead,
   };
 };
 
@@ -141,8 +148,143 @@ export const getPromotionContext = async ({
     );
   }
 
+  let profile = null;
+
+  if (participantValid.data?.user_id) {
+    const { data: profileData, error: profileError } = await db
+      .from(Table.Profiles)
+      .select("id, global_role")
+      .eq("id", participantValid.data.user_id)
+      .maybeSingle();
+
+    if (profileError) {
+      throw new AppError(
+        "Profile fetch failed",
+        ERROR_CODES.PROFILE_LOOKUP_FAILED,
+        500,
+      );
+    }
+
+    if (profileData) {
+      profile = profileData;
+    }
+  }
+
   return {
     participant: participantValid.data,
     teamLead: teamLeadExists.data,
+    profile,
   };
+};
+
+export const validateParticipantForPromotion = ({
+  participant,
+  profile,
+}: {
+  participant: PromotionParticipant | null;
+  profile: PromotionContext["profile"];
+}) => {
+  if (!participant) {
+    throw new AppError(
+      "Participant not found",
+      ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND,
+      404,
+    );
+  }
+
+  if (participant.banned) {
+    throw new AppError(
+      "Participant banned",
+      ERROR_CODES.PARTICIPANT_BANNED,
+      409,
+    );
+  }
+
+  if (!participant.user_id || !profile) {
+    throw new AppError(
+      "Participant doesn't have an account yet",
+      ERROR_CODES.USER_NOT_REGISTERED,
+      400,
+    );
+  }
+
+  if (profile.global_role !== Role.User) {
+    throw new AppError(
+      "Participant must have user role to be promoted to team lead",
+      ERROR_CODES.NOT_A_TEAM_LEAD,
+      403,
+    );
+  }
+
+  return true;
+};
+
+export const validateYearAccess = ({
+  participant,
+}: {
+  participant: PromotionParticipant | null;
+}) => {
+  if (!participant) {
+    throw new AppError(
+      "Participant not found",
+      ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND,
+      404,
+    );
+  }
+
+  if (!participant.year_access.length) {
+    throw new AppError(
+      "The participant doesn't have access to this year",
+      ERROR_CODES.YEAR_ACCESS_NOT_APPROVED,
+      403,
+    );
+  }
+
+  return true;
+};
+
+export const validateTeamMembership = ({
+  participant,
+}: {
+  participant: PromotionParticipant | null;
+}) => {
+  if (!participant) {
+    throw new AppError(
+      "Participant not found",
+      ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND,
+      404,
+    );
+  }
+
+  if (!participant.team_memberships.length) {
+    throw new AppError(
+      "Participant not in the team",
+      ERROR_CODES.TEAM_MEMBERSHIP_NOT_FOUND,
+      404,
+    );
+  }
+
+  return true;
+};
+
+export const validateTeamLeadConstraint = ({
+  teamLead,
+  participantId,
+}: {
+  teamLead: PromotionContext["teamLead"];
+  participantId: string;
+}) => {
+  if (
+    teamLead &&
+    teamLead.id &&
+    teamLead.year_participant_id !== participantId
+  ) {
+    throw new AppError(
+      "Team Lead already exists for this team",
+      ERROR_CODES.TEAM_LEAD_ALREADY_EXISTS,
+      409,
+    );
+  }
+
+  return true;
 };

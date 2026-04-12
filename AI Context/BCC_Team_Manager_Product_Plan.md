@@ -387,15 +387,8 @@ viewer < user < admin < superadmin
 
 ## 9. What's Next (Immediate)
 
-1. Pure validator functions in `src/utils/team_memberships.ts`:
-   - `validateParticipantForPromotion(ctx)` — checks exists, not banned, has user_id
-   - `validateYearAccess(ctx)` — checks approved year_access
-   - `validateTeamMembership(ctx)` — checks participant is in teamId
-   - `validateTeamLeadConstraint(ctx)` — checks no lead already exists
-2. `promoteToTeamLead` service + `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
-3. `demoteTeamLead` service + `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
-4. Remove year access endpoint with cascade cleanup
-5. Role promotion/demotion dashboard endpoints
-6. Tasks and scoring
-7. Leaderboard
-8. Testing suite
+1. Remove year access endpoint with cascade cleanup
+2. Role promotion/demotion dashboard endpoints
+3. Tasks and scoring
+4. Leaderboard
+5. Testing suite

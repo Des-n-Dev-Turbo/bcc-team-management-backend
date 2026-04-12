@@ -4,7 +4,14 @@ import { getSupabase } from "@/lib";
 import { Role } from "@/types";
 import { AppError } from "@/utils/error.ts";
 import { getRequesterTeam } from "@/utils/participants.ts";
-import { validateTeamParticipants } from "@/utils/team_memberships.ts";
+import {
+  getPromotionContext,
+  validateParticipantForPromotion,
+  validateTeamLeadConstraint,
+  validateTeamMembership,
+  validateTeamParticipants,
+  validateYearAccess,
+} from "@/utils/team_memberships.ts";
 
 export const addParticipantToTeam = async ({
   yearId,
@@ -232,4 +239,139 @@ export const transferParticipant = async ({
   }
 
   return { name: toTeamData.name, teamId: updatedData.team_id };
+};
+
+export const promoteToTeamLead = async ({
+  participantId,
+  membershipId,
+  yearId,
+  teamId,
+}: {
+  participantId: string;
+  membershipId: string;
+  yearId: string;
+  teamId: string;
+}) => {
+  const db = getSupabase();
+
+  const { data: yearData, error: yearError } = await db
+    .from(Table.Years)
+    .select("id, is_locked")
+    .eq("id", yearId)
+    .maybeSingle();
+
+  if (yearError) {
+    throw new AppError(
+      "The year was not able to be fetched",
+      ERROR_CODES.YEAR_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!yearData) {
+    throw new AppError("Year was not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
+  }
+
+  if (yearData.is_locked) {
+    throw new AppError(
+      "The Participant cannot be promoted to a locked year",
+      ERROR_CODES.YEAR_ALREADY_LOCKED,
+      409,
+    );
+  }
+
+  const promotionContext = await getPromotionContext({
+    participantId,
+    teamId,
+    yearId,
+  });
+
+  validateParticipantForPromotion({
+    participant: promotionContext.participant,
+    profile: promotionContext.profile,
+  }),
+    validateYearAccess({ participant: promotionContext.participant }),
+    validateTeamMembership({ participant: promotionContext.participant }),
+    validateTeamLeadConstraint({
+      participantId: promotionContext.participant?.id ?? participantId,
+      teamLead: promotionContext.teamLead,
+    });
+
+  const { data: teamLeadData, error: teamLeadError } = await db
+    .from(Table.TeamMemberships)
+    .update({ is_team_lead: true })
+    .eq("id", membershipId)
+    .eq("year_participant_id", participantId)
+    .eq("team_id", teamId)
+    .is("is_team_lead", false)
+    .select("id, team_id, year_participant_id, is_team_lead")
+    .single();
+
+  if (teamLeadError) {
+    throw new AppError(
+      "Unable to update participant to team lead",
+      ERROR_CODES.TEAM_MEMBERSHIP_UPDATE_FAILED,
+      500,
+    );
+  }
+
+  if (!teamLeadData) {
+    throw new AppError(
+      "The Team Membership is not available",
+      ERROR_CODES.TEAM_MEMBERSHIP_NOT_FOUND,
+      404,
+    );
+  }
+
+  return teamLeadData;
+};
+
+export const demoteFromTeamLead = async ({
+  membershipId,
+  yearId,
+  teamId,
+}: {
+  membershipId: string;
+  yearId: string;
+  teamId: string;
+}) => {
+  const { db, currentTeamId, isTeamLead } = await validateTeamParticipants({
+    yearId,
+    membershipId,
+  });
+
+  if (teamId !== currentTeamId) {
+    throw new AppError(
+      "There is a conflict between the team the participant belongs to",
+      ERROR_CODES.INVALID_REQUEST,
+      409,
+    );
+  }
+
+  if (!isTeamLead) {
+    throw new AppError(
+      "The participant you are trying to demote is not a team lead",
+      ERROR_CODES.NOT_A_TEAM_LEAD,
+      400,
+    );
+  }
+
+  const { data: teamMembershipUpdateData, error: teamMembershipUpdateError } =
+    await db
+      .from(Table.TeamMemberships)
+      .update({ is_team_lead: false })
+      .eq("id", membershipId)
+      .eq("team_id", currentTeamId)
+      .select("id, team_id, year_participant_id, is_team_lead")
+      .single();
+
+  if (teamMembershipUpdateError || !teamMembershipUpdateData) {
+    throw new AppError(
+      "Error updating team membership",
+      ERROR_CODES.TEAM_MEMBERSHIP_UPDATE_FAILED,
+      500,
+    );
+  }
+
+  return teamMembershipUpdateData;
 };

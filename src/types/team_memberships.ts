@@ -8,7 +8,7 @@ type TeamMembershipRecord = {
   is_team_lead: boolean;
 };
 
-type PromotionParticipant = {
+export type PromotionParticipant = {
   id: string;
   banned: boolean;
   name: string;
@@ -24,5 +24,9 @@ export type PromotionContext = {
     id: string;
     year_participant_id: string;
     is_team_lead: boolean;
+  } | null;
+  profile: {
+    id: any;
+    global_role: any;
   } | null;
 };

@@ -9,6 +9,12 @@ import {
 import {
   addParticipantToTeamQuerySchema,
   addParticipantToTeamSchema,
+  demoteFromTeamLeadBodySchema,
+  demoteFromTeamLeadParamsSchema,
+  demoteFromTeamLeadQuerySchema,
+  promoteToTeamLeadBodySchema,
+  promoteToTeamLeadParamsSchema,
+  promoteToTeamLeadQuerySchema,
   removeParticipantFromTeamParamsSchema,
   removeParticipantFromTeamQuerySchema,
   transferParticipantToTeamQuerySchema,
@@ -16,6 +22,8 @@ import {
 } from "@/schemas/team_memberships.schema.ts";
 import {
   addParticipantToTeam,
+  demoteFromTeamLead,
+  promoteToTeamLead,
   removeParticipantFromTeam,
   transferParticipant,
 } from "@/services";
@@ -106,6 +114,61 @@ router.patch(
       membershipId,
       yearId,
     });
+
+    return c.json(result, 200);
+  },
+);
+
+router.patch(
+  TeamMembershipRoutes.PromoteById,
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate("param", promoteToTeamLeadParamsSchema),
+  validate("json", promoteToTeamLeadBodySchema),
+  validate("query", promoteToTeamLeadQuerySchema),
+  async (c) => {
+    const { membershipId } = getValidated(
+      c,
+      "param",
+      promoteToTeamLeadParamsSchema,
+    );
+
+    const { participantId, teamId } = getValidated(
+      c,
+      "json",
+      promoteToTeamLeadBodySchema,
+    );
+
+    const { yearId } = getValidated(c, "query", promoteToTeamLeadQuerySchema);
+
+    const result = await promoteToTeamLead({
+      membershipId,
+      participantId,
+      teamId,
+      yearId,
+    });
+
+    return c.json(result, 200);
+  },
+);
+
+router.patch(
+  TeamMembershipRoutes.DemoteById,
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate("param", demoteFromTeamLeadParamsSchema),
+  validate("json", demoteFromTeamLeadBodySchema),
+  validate("query", demoteFromTeamLeadQuerySchema),
+  async (c) => {
+    const params = getValidated(c, "param", demoteFromTeamLeadParamsSchema);
+
+    const body = getValidated(c, "json", demoteFromTeamLeadBodySchema);
+
+    const query = getValidated(c, "query", demoteFromTeamLeadQuerySchema);
+
+    const result = await demoteFromTeamLead({ ...params, ...body, ...query });
 
     return c.json(result, 200);
   },

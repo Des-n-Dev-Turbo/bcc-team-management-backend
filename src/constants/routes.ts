@@ -21,6 +21,8 @@ export const TeamMembershipRoutes = {
   AddParticipant: "/",
   Transfer: "/transfer",
   RemoveById: "/:membershipId",
+  PromoteById: "/:membershipId/promote",
+  DemoteById: "/:membershipId/demote",
 } as const;
 
 export const YearAccessRoutes = {
