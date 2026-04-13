@@ -70,7 +70,7 @@ viewer < user < admin < superadmin
 - [x] Admin rejects request
 - [x] Max 3 requests per user per year
 - [x] Remove year access (admin+) — `DELETE /year-access/:userId?yearId=xxx`, rejects year_access + cascade cleanup for team leads
-- [ ] List all approved year access users — `GET /year-access/users?yearId=xxx` (admin+, excludes banned)
+- [x] List all approved year access users — `GET /year-access/users?yearId=xxx` (admin+, excludes banned, merges Auth API + profiles)
 - [ ] Notify user via email on approve/reject (Brevo)
 
 ### 4.3a Role Promotion & Demotion (separate dashboard, outside year context)
@@ -147,13 +147,9 @@ viewer < user < admin < superadmin
 - [x] Remove participant from team (admin+) — `DELETE /team-memberships/:membershipId?yearId=xxx`
 - [x] Move regular participant to another team (admin+ only) — `PATCH /team-memberships/transfer?yearId=xxx`
   - Ghost Points: score_events NOT updated on transfer, team-specific task points don't count for new team
-- [ ] Promote participant to team lead — `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
-  - 7 preconditions enforced via `getPromotionContext` + pure validators
-  - `getPromotionContext` built in `src/utils/team_memberships.ts` ✅
-  - Pure validator functions — next to implement
-  - Frontend-orchestrated swap on `TEAM_LEAD_ALREADY_EXISTS` — no backend auto-demotion
-  - `TEAM_LEAD_ALREADY_EXISTS` response includes `{ currentLead: { id, name }, canReplace: true }`
-- [ ] Demote team lead to regular member — `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
+- [x] Promote participant to team lead — `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
+  - 7 preconditions via `getPromotionContext` + pure validators, frontend-orchestrated swap
+- [x] Demote team lead to regular member — `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
   - Sets `is_team_lead = false`, stays in same team, role unchanged
 
 #### Team Lead Demotion Rules
@@ -241,16 +237,16 @@ viewer < user < admin < superadmin
 - [x] Ban/Unban — complete with Pardon vs Reinstatement pattern, RPC functions, partial success handling
 - [x] Disqualify/Undisqualify
 
-### Phase 3 — Team Memberships & Promotion 🔄 IN PROGRESS
+### Phase 3 — Team Memberships & Promotion ✅ DONE
 
 - [x] Assign participant to team (admin+ any team, team lead own team only)
 - [x] Remove participant from team (admin+)
 - [x] Move participant between teams (admin+ only, ghost points decision locked)
 - [x] New error codes — `TEAM_LEAD_ALREADY_EXISTS`, `USER_NOT_REGISTERED`, `YEAR_ACCESS_NOT_APPROVED`, `NOT_A_TEAM_LEAD`
 - [x] `getPromotionContext` utility in `src/utils/team_memberships.ts`
-- [ ] Pure validator functions in `src/utils/team_memberships.ts`
-- [ ] `promoteToTeamLead` service + `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
-- [ ] `demoteTeamLead` service + `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
+- [x] Pure validator functions in `src/utils/team_memberships.ts`
+- [x] `promoteToTeamLead` service + `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
+- [x] `demoteFromTeamLead` service + `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
 
 ### Phase 4 — Tasks & Scoring
 
@@ -267,9 +263,8 @@ viewer < user < admin < superadmin
 
 ### Phase 6 — Role Promotion/Demotion Dashboard
 
-- Remove year access endpoint with cascade cleanup
 - List all users with global_role
-- Promote/demote global role endpoints
+- Promote/demote global role endpoints (`/roles`)
 
 ### Phase 7 — Notifications
 
@@ -352,15 +347,16 @@ viewer < user < admin < superadmin
   POST  /?yearId=xxx                        — assign participant to team (user+)
   DELETE /:membershipId?yearId=xxx          — remove from team (admin+)
   PATCH /transfer?yearId=xxx                — move participant to another team (admin+)
-  PATCH /:membershipId/promote?yearId=xxx   — promote to team lead (admin+) — PLANNED
-  PATCH /:membershipId/demote?yearId=xxx    — demote to regular member (admin+) — PLANNED
+  PATCH /:membershipId/promote?yearId=xxx   — promote to team lead (admin+)
+  PATCH /:membershipId/demote?yearId=xxx    — demote to regular member (admin+)
 
 /year-access
   POST  /                                   — request year access
-  GET   /                                   — view all requests (admin+)
+  GET   /                                   — view all requests grouped (admin+)
+  GET   /users?yearId=xxx                   — list approved users for year (admin+)
   PATCH /:id/approve                        — approve request (admin+)
   PATCH /:id/reject                         — reject request (admin+)
-  DELETE /:id                               — remove year access + cleanup (admin+) — PLANNED
+  DELETE /:userId?yearId=xxx                — remove year access + cascade cleanup (admin+)
 
 /roles                                      — PLANNED
   GET   /users                              — list all users with global_role (admin+)
@@ -388,8 +384,7 @@ viewer < user < admin < superadmin
 
 ## 9. What's Next (Immediate)
 
-1. `GET /year-access/users?yearId=xxx` — list all approved year access users (admin+)
-2. Role promotion/demotion dashboard endpoints
-3. Tasks and scoring
-4. Leaderboard
-5. Testing suite
+1. Role promotion/demotion dashboard endpoints (`GET /roles/users`, `PATCH /roles/:userId/promote`, `PATCH /roles/:userId/demote`)
+2. Tasks and scoring
+3. Leaderboard
+4. Testing suite

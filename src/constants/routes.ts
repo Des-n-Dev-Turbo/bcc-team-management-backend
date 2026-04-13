@@ -32,6 +32,7 @@ export const YearAccessRoutes = {
   Approve: "/:id/approve",
   Reject: "/:id/reject",
   Remove: "/:userId/remove",
+  GetUsers: "/users",
 } as const;
 
 export const ProfileRoutes = {

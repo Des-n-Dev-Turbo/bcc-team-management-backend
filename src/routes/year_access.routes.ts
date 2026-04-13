@@ -8,6 +8,7 @@ import {
   requestYearAccessSchema,
 } from "@/schemas/year_access.schema.ts";
 import {
+  getAllYearAccessProfiles,
   getYearAccessRequests,
   removeYearAccess,
   requestYearAccess,
@@ -126,6 +127,21 @@ router.delete(
       },
       200,
     );
+  },
+);
+
+router.get(
+  YearAccessRoutes.GetUsers,
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate("query", deleteYearAccessQuerySchema),
+  async (c) => {
+    const { yearId } = getValidated(c, "query", deleteYearAccessQuerySchema);
+
+    const result = await getAllYearAccessProfiles({ yearId });
+
+    return c.json(result, 200);
   },
 );
 

@@ -428,3 +428,85 @@ export const removeYearAccess = async ({
 
   return true;
 };
+
+export const getAllYearAccessProfiles = async ({
+  yearId,
+}: {
+  yearId: string;
+}) => {
+  const db = getSupabase();
+
+  const { data: yearAccessData, error: yearAccessError } = await db
+    .from(Table.YearAccess)
+    .select("user_id")
+    .eq("year_id", yearId)
+    .eq("status", YearAccessStatus.APPROVED);
+
+  if (yearAccessError) {
+    throw new AppError(
+      "Unable to fetch year access",
+      ERROR_CODES.YEAR_ACCESS_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!yearAccessData || yearAccessData.length === 0) {
+    return [];
+  }
+
+  const userIds = yearAccessData.map(
+    (yearAccess) => yearAccess.user_id,
+  ) as string[];
+
+  const [profilesFetch, usersFetch] = await Promise.all([
+    db.from(Table.Profiles).select("id, global_role").in("id", userIds),
+    db.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    }),
+  ]);
+
+  if (profilesFetch.error || usersFetch.error) {
+    throw new AppError(
+      "Unable to fetch users with year access",
+      ERROR_CODES.USERS_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (profilesFetch.data.length === 0 || usersFetch.data?.users?.length === 0) {
+    return [];
+  }
+
+  const usersMap = new Map<
+    string,
+    { id: string; role: string; email?: string; name?: string }
+  >();
+
+  profilesFetch.data.forEach((user) => {
+    if (!usersMap.has(user.id)) {
+      usersMap.set(user.id, {
+        id: user.id as string,
+        role: user.global_role as string,
+      });
+    }
+  });
+
+  usersFetch.data.users.forEach((user) => {
+    if (usersMap.has(user.id)) {
+      const userData = usersMap.get(user.id);
+
+      if (userData) {
+        usersMap.set(user.id, {
+          ...userData,
+          email: user?.email,
+          name: user.user_metadata?.full_name ?? user.user_metadata?.name,
+        });
+      }
+    }
+  });
+
+  const usersList = usersMap.values();
+
+  return Array.from(usersList);
+};
