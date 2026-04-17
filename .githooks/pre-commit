@@ -1,0 +1,17 @@
+#!/bin/sh
+
+echo "Running Biome checks ... "
+
+# Auto-format, lint and fix
+deno task check
+
+# Stage only files modified by Biome
+git diff --name-only | xargs git add 
+
+if [ $? -ne 0 ]; then
+   echo "Biome check failed. Please fix the issues before commiting."
+   exit 1
+fi
+
+echo "All checks passed. Proceeding with commit."
+exit 0

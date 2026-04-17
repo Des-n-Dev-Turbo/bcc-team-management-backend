@@ -1,0 +1,12 @@
+#!/bin/sh
+
+echo "Running commitlint..."
+deno run -A npm:@commitlint/cli --edit "$1"
+
+if [ $? -ne 0 ]; then
+   echo "Commit message validation failed! Please use conventional commits (e.g. 'feat: added something' or 'fix: resolved issue')."
+   exit 1
+fi
+
+echo "Commit message valid."
+exit 0

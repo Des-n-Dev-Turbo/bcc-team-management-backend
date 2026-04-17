@@ -8,17 +8,19 @@ export const getRequesterTeam = async ({
   yearId,
   userId,
   role,
+  requestedTeamId,
 }: {
   yearId: string;
   userId: string;
   role: Role;
+  requestedTeamId?: string;
 }) => {
   if (role === Role.Admin || role === Role.Superadmin) {
-    return { teamId: null, canSeePII: true };
+    return { teamId: null, actualTeamId: null, canSeePII: true };
   }
 
   if (role === Role.Viewer) {
-    return { teamId: null, canSeePII: false };
+    return { teamId: null, actualTeamId: null, canSeePII: false };
   }
 
   if (role === Role.User) {
@@ -40,7 +42,7 @@ export const getRequesterTeam = async ({
     }
 
     if (!data) {
-      return { teamId: null, canSeePII: false };
+      return { teamId: null, actualTeamId: null, canSeePII: false };
     }
 
     const membership = Array.isArray(data.team_memberships)
@@ -48,12 +50,18 @@ export const getRequesterTeam = async ({
       : data.team_memberships;
 
     return {
-      teamId: membership?.team_id ?? null,
-      canSeePII: !!membership?.is_team_lead,
-    } as { teamId: string | null; canSeePII: boolean };
+      teamId: requestedTeamId ?? null,
+      actualTeamId: membership?.team_id ?? null,
+      canSeePII:
+        requestedTeamId === membership?.team_id && !!membership?.is_team_lead,
+    } as {
+      teamId: string | null;
+      actualTeamId: string | null;
+      canSeePII: boolean;
+    };
   }
 
-  return { teamId: null, canSeePII: false };
+  return { teamId: null, actualTeamId: null, canSeePII: false };
 };
 
 export const applyPrivacyMask = (

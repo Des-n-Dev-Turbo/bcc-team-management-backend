@@ -69,19 +69,34 @@ viewer < user < admin < superadmin
 - [x] Admin approves request (grants viewer access)
 - [x] Admin rejects request
 - [x] Max 3 requests per user per year
-- [x] Remove year access (admin+) — `DELETE /year-access/:userId?yearId=xxx`, rejects year_access + cascade cleanup for team leads
+- [x] Remove year access (admin+) — `DELETE /year-access/:userId/remove?yearId=xxx`, rejects year_access + cascade cleanup for team leads
 - [x] List all approved year access users — `GET /year-access/users?yearId=xxx` (admin+, excludes banned, merges Auth API + profiles)
 - [ ] Notify user via email on approve/reject (Brevo)
 
-### 4.3a Role Promotion & Demotion (separate dashboard, outside year context)
+### 4.3a Role Promotion & Demotion (`/roles` dashboard) — Design Locked
 
-- [ ] List all users with global_role (admin+)
-- [ ] Promote viewer → user (team lead) — global role change; creates year_participant for most recent year if approved year_access exists
-- [ ] Promote viewer/user → admin — global role change; removes team_membership and year_participant for current year if applicable
-- [ ] Promote admin → superadmin (superadmin only)
-- [ ] Demote user → viewer — global role change; removes team_membership and year_participant for current year
-- [ ] Demote admin → user/viewer (superadmin only)
-- [ ] Demote team lead to regular participant within same team — is_team_lead set to false, stays in team
+- [ ] `GET /roles/users` — list users with global_role (admin+)
+  - Auth Admin API `listUsers` (perPage: 1000) + `profiles` `.in(userIds)` — merged in memory
+  - Admin sees: viewer, user only
+  - Superadmin sees: viewer, user, admin (superadmin excluded from management)
+- [ ] `PATCH /roles/:userId/role` — single endpoint, body: `{ currentRole, targetRole }` (admin+)
+  - Admin: viewer ↔ user only. Attempt to go beyond → 403
+  - Superadmin: viewer ↔ user, viewer ↔ admin, user ↔ admin
+  - Same role → 400. Invalid pair → 400
+
+#### Side Effects Per Transition (all locked)
+
+| Transition     | Side Effects |
+| -------------- | ------------ |
+| viewer → user  | Create `year_participant` for active year — only if active year exists AND viewer has approved `year_access` |
+| user → viewer  | Remove `team_membership` + `year_participant` for active year |
+| viewer → admin | Update role, remove `year_access` for active year (if exists) |
+| admin → viewer | Update role, create approved `year_access` for active year (if exists and not already approved) |
+| user → admin   | Remove `team_membership` + `year_participant` for active year |
+| admin → user   | Update role, create `year_participant` for active year (if active year exists) |
+
+**Active year:** `years` where `is_locked IS NULL OR is_locked = false`, order `created_at DESC`, take first.
+If no active year → skip dependent side effects, proceed with role change only.
 
 ### 4.4 Team Management
 
@@ -97,7 +112,7 @@ viewer < user < admin < superadmin
 - [x] Add single participant to a year (admin+)
 - [x] Bulk add participants via CSV (admin+)
 - [x] Get all volunteers for a year — paginated, 50/page, default sort name asc, with filtering and sorting (any with year access)
-- [x] Get all volunteers for a specific team — non-paginated, sorted by name, privacy masked (any with year access)
+- [x] Get all volunteers for a specific team — limit 50, sorted by name, privacy masked (any with year access)
   - Scores excluded — served via separate endpoint when scoring is built (Option B decision)
 - [x] Privacy masking — email/mobile redacted based on role and team assignment
 - [x] Shared utility functions — `getRequesterTeam`, `applyPrivacyMask`
@@ -188,7 +203,7 @@ viewer < user < admin < superadmin
 
 - [x] email and mobile masked for non-admin, non-self, non-team-lead
 - [x] Applied in service layer before response is sent
-- [x] Team lead can see own team's full contact info only
+- [x] Team lead can see own team's full contact info only (strictly enforced via `requestedTeamId` validation in `getRequesterTeam`)
 
 ### 4.11 Audit Logging
 
@@ -248,23 +263,25 @@ viewer < user < admin < superadmin
 - [x] `promoteToTeamLead` service + `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
 - [x] `demoteFromTeamLead` service + `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
 
-### Phase 4 — Tasks & Scoring
+### Phase 4 — Role Promotion/Demotion Dashboard (IN PROGRESS)
+
+- Design fully locked (see Section 4.3a)
+- [ ] `src/utils/roles.ts` — `getActiveYear`, `validateRoleTransition`, side effect helpers
+- [ ] `getRolesDashboardUsers` service + `GET /roles/users` route
+- [ ] `changeUserRole` service + `PATCH /roles/:userId/role` route
+
+### Phase 5 — Tasks & Scoring
 
 - Task creation (team-level and year-level)
 - Score event recording
 - Score editing rules (admin base only)
 - Medal and bonus logic
 
-### Phase 5 — Leaderboard
+### Phase 6 — Leaderboard
 
 - Per-team leaderboard query
 - Year leaderboard (top 2 per team)
 - Exclusion logic (disqualified, staff roles)
-
-### Phase 6 — Role Promotion/Demotion Dashboard
-
-- List all users with global_role
-- Promote/demote global role endpoints (`/roles`)
 
 ### Phase 7 — Notifications
 
@@ -311,7 +328,11 @@ viewer < user < admin < superadmin
 | score_events on ban                    | Soft delete (`is_deleted = true`)                                         | Preserves audit trail; reversible on unban                                                                                      |
 | Ban scope                              | Single year_participant record only                                       | Registration check against most recent record enforces permanent ban system-wide                                                |
 | Team lead ban — year_access cleanup    | Delete current year only                                                  | Historical year_access records preserved; only active year access removed                                                       |
-| Promotion swap                         | Frontend-orchestrated — demote then promote as two separate calls         | No backend auto-demotion; safe failure state is 0 leads; avoids ghost authority                                                 |
+| Roles endpoint structure               | Single `PATCH /roles/:userId/role` with `{ currentRole, targetRole }` body | Avoids two endpoints with identical auth/side-effect logic; direction inferred from payload |
+| Roles — admin visibility scope         | Admin sees viewer/user only; superadmin sees viewer/user/admin            | Superadmin management out of scope for admin; superadmin role itself never manageable       |
+| Roles — invalid transition handling    | 400 BAD_REQUEST; same-role also 400                                       | Frontend prevents this; API enforces it independently                                       |
+| Roles — active year for side effects   | `is_locked IS NULL OR false`, order by `created_at DESC`, take first      | Business rule already guarantees at most one unlocked year                                  |
+| Roles — no active year                 | Skip dependent side effects, proceed with role change only                | Role is global; active year is contextual — missing year should not block role change       |
 | Team lead promotion error code         | `TEAM_LEAD_ALREADY_EXISTS` (chosen over `TEAM_LEAD_EXISTS`)               | More descriptive; frontend not yet built so no contract to break                                                                |
 
 ---
@@ -356,12 +377,11 @@ viewer < user < admin < superadmin
   GET   /users?yearId=xxx                   — list approved users for year (admin+)
   PATCH /:id/approve                        — approve request (admin+)
   PATCH /:id/reject                         — reject request (admin+)
-  DELETE /:userId?yearId=xxx                — remove year access + cascade cleanup (admin+)
+  DELETE /:userId/remove?yearId=xxx             — remove year access + cascade cleanup (admin+)
 
-/roles                                      — PLANNED
-  GET   /users                              — list all users with global_role (admin+)
-  PATCH /:userId/promote                    — promote user role
-  PATCH /:userId/demote                     — demote user role
+/roles
+  GET   /users                              — list users with global_role, filtered by actor role (admin+)
+  PATCH /:userId/role                       — promote or demote, body: { currentRole, targetRole } (admin+)
 
 /tasks                                      — PLANNED
 /scores                                     — PLANNED
@@ -384,7 +404,7 @@ viewer < user < admin < superadmin
 
 ## 9. What's Next (Immediate)
 
-1. Role promotion/demotion dashboard endpoints (`GET /roles/users`, `PATCH /roles/:userId/promote`, `PATCH /roles/:userId/demote`)
+1. Role promotion/demotion dashboard — design locked, building `src/utils/roles.ts` util functions next
 2. Tasks and scoring
 3. Leaderboard
 4. Testing suite

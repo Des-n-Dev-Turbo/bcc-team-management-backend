@@ -102,10 +102,11 @@ export const addParticipantToTeam = async ({
   }
 
   if (role === Role.User) {
-    const { teamId: requesterTeamId } = await getRequesterTeam({
+    const { actualTeamId: requesterTeamId } = await getRequesterTeam({
       userId,
       yearId,
       role,
+      requestedTeamId: teamId,
     });
     if (requesterTeamId !== teamId) {
       throw new AppError(

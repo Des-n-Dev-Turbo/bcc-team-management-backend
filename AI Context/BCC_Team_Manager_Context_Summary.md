@@ -176,7 +176,7 @@ viewer < user < admin < superadmin
 - Team view: `GET /years/:yearId/teams/:teamId/participants` — all records, sorted by name, volunteers only (`.is('user_id', null)`)
 - Both accessible by any authenticated user with approved year_access
 - Shared utility functions in `src/utils/participants.ts`:
-  - `getRequesterTeam(userId, yearId)` — finds requester's team via year_participants → team_memberships join
+  - `getRequesterTeam({ userId, yearId, role, requestedTeamId })` — finds requester's team (`actualTeamId`) and restricts `canSeePII` only to their strictly requested team if provided
   - `applyPrivacyMask(participant, canSeePII)` — redacts email/mobile, flattens team_memberships join
 
 ### Participant Listing — Banned and Disqualified Rules
@@ -329,6 +329,7 @@ Two modes controlled by optional `restoreAccess` query param:
 ## 6. Privacy Model
 
 - email, mobile visible to: admin+, same team lead, self
+  - "same team lead" means the requester is a team lead AND the specific team being queried identically matches their own team (`requestedTeamId === actualTeamId`)
 - All others see masked/null values
 - Enforced in backend service layer, not DB RLS
 
@@ -347,10 +348,10 @@ Two modes controlled by optional `restoreAccess` query param:
   POST /                  — create year (superadmin)
   GET  /                  — get all years with access status
   POST /:yearId/lock      — lock year (admin+)
-  POST /:yearId/participants       — add single participant (admin+)
-  POST /:yearId/participants/bulk  — bulk CSV upload (admin+)
+  POST /:yearId/participants               — add single participant (admin+)
+  POST /:yearId/participants/bulk          — bulk CSV upload (admin+)
   GET  /:yearId/participants               — paginated volunteer list
-  GET  /:yearId/teams/:teamId/participants — team volunteer list
+  GET  /:yearId/teams/:teamId/participants — team volunteer list (limit 50)
   GET  /:yearId/team-leads                 — all team leads incl. banned (admin+)
   PATCH /:yearId/participants/:id/ban
   PATCH /:yearId/participants/:id/unban
@@ -358,37 +359,33 @@ Two modes controlled by optional `restoreAccess` query param:
   PATCH /:yearId/participants/:id/undisqualify
 
 /teams
-  POST /create            — create team (admin+)
-  GET  /                  — get teams by yearId
-  PATCH /:teamId          — update team name (admin+)
-  POST /year/:yearId/copy — copy teams from previous year (admin+)
+  POST /create                    — create team (admin+)
+  GET  /                          — get teams by yearId
+  PATCH /:teamId                  — update team name (admin+)
+  POST /year/:yearId/copy         — copy teams from previous year (admin+)
 
 /team-memberships
-  POST /?yearId=xxx                    — assign participant to team
-  DELETE /:membershipId?yearId=xxx     — remove participant from team (admin+)
-  PATCH /transfer?yearId=xxx           — transfer participant to another team (admin+)
+  POST /?yearId=xxx                        — assign participant to team
+  DELETE /:membershipId?yearId=xxx         — remove participant from team (admin+)
+  PATCH /transfer?yearId=xxx               — transfer participant to another team (admin+)
+  PATCH /:membershipId/promote?yearId=xxx  — promote to team lead (admin+)
+  PATCH /:membershipId/demote?yearId=xxx   — demote to regular member (admin+)
 
 /year-access
-  POST /                  — request year access
-  GET  /                  — get all requests grouped by status (admin+)
-  PATCH /:id/approve      — approve request (admin+)
-  PATCH /:id/reject       — reject request (admin+)
+  POST /                          — request year access
+  GET  /                          — get all requests grouped by status (admin+)
+  GET  /users?yearId=xxx          — list approved users for year (admin+)
+  PATCH /:id/approve              — approve request (admin+)
+  PATCH /:id/reject               — reject request (admin+)
+  DELETE /:userId/remove?yearId=xxx — remove year access + cascade cleanup (admin+)
 ```
 
 ### Planned Routes
 
 ```
-/team-memberships
-  PATCH /:membershipId/promote?yearId=xxx  — promote to team lead (admin+)
-  PATCH /:membershipId/demote?yearId=xxx   — demote to regular member (admin+)
-
-/year-access
-  DELETE /:id             — remove year access + cleanup (admin+)
-
 /roles
-  GET    /users           — list all users with global_role (admin+)
-  PATCH  /:userId/promote — promote user role
-  PATCH  /:userId/demote  — demote user role
+  GET   /users            — list users with global_role (admin sees viewer/user, superadmin sees viewer/user/admin)
+  PATCH /:userId/role     — promote or demote user, body: { currentRole, targetRole } (admin+)
 ```
 
 ---
@@ -522,12 +519,13 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
   - Viewer: only year_access rejected
   - User (team lead): year_access rejected + team_membership deleted + year_participant deleted
   - Rejection counts toward MAX_YEAR_REQUEST_ATTEMPTS — intentional lockout mechanism
-- `DELETE /year-access/:userId?yearId=xxx` route built — admin+
+- `DELETE /year-access/:userId/remove?yearId=xxx` route built — admin+
 - `getAllYearAccessProfiles` service built — 1 sequential call (year_access by yearId + approved status) then 2 parallel calls (profiles `.in(userIds)` + `listUsers`), merged in memory via Map, returns `{ id, role, email, name }` per user
 - `GET /year-access/users?yearId=xxx` route built — admin+
 - `demoteFromTeamLead` service — validateTeamParticipants, isTeamLead check, sets `is_team_lead = false`
 - `PATCH /team-memberships/:membershipId/promote?yearId=xxx` route — admin+, body: `{ participantId, teamId }`
 - `PATCH /team-memberships/:membershipId/demote?yearId=xxx` route — admin+, body: `{ teamId }`
+- `/roles` dashboard — design fully locked, implementation pending (see Section 14)
 
 ### Supabase RPC Functions
 
@@ -537,9 +535,66 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 
 ---
 
-## 14. What's Next (in order)
+## 14. Role Promotion/Demotion Dashboard — Design (Locked)
 
-1. Role promotion/demotion dashboard endpoints (`/roles`)
-3. Tasks and scoring
-4. Leaderboard
-5. Testing suite
+### Endpoints
+
+```
+GET  /roles/users              — list users with global_role (admin+)
+PATCH /roles/:userId/role      — promote or demote a user (admin+)
+```
+
+### GET /roles/users
+
+- Auth Admin API `listUsers` (perPage: 1000) + `profiles` `.in(userIds)` — merged in memory
+- **Admin** sees: viewer, user roles only
+- **Superadmin** sees: viewer, user, admin roles (superadmin excluded from management)
+
+### PATCH /roles/:userId/role — Body: `{ currentRole, targetRole }`
+
+#### Role Change Permission Matrix
+
+| Actor       | Allowed Transitions                                          |
+| ----------- | ------------------------------------------------------------ |
+| admin       | viewer ↔ user only                                           |
+| superadmin  | viewer ↔ user, viewer ↔ admin, user ↔ admin                  |
+
+- If actor is admin and tries to promote to/from admin → 403 FORBIDDEN
+- If `currentRole === targetRole` → 400 BAD_REQUEST
+- If transition is not in valid set → 400 BAD_REQUEST
+
+#### Side Effects Per Transition
+
+| Transition     | Side Effects                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------- |
+| viewer → user  | Create `year_participant` for active year — only if active year exists AND viewer has approved `year_access` for it |
+| user → viewer  | Remove `team_membership` + `year_participant` for active year                                     |
+| viewer → admin | Update role, remove `year_access` for active year (if exists)                                     |
+| admin → viewer | Update role, create approved `year_access` for active year (if exists and not already approved)   |
+| user → admin   | Remove `team_membership` + `year_participant` for active year                                     |
+| admin → user   | Update role, create `year_participant` for active year (if active year exists)                    |
+
+#### Active Year Determination
+
+- Query `years` where `is_locked IS NULL OR is_locked = false`, order by `created_at DESC`, take first
+- If no active year exists — skip side effects that depend on it, proceed with role change only
+
+### Service Structure
+
+- `getRolesDashboardUsers` — fetch and merge Auth API + profiles, filter by actor role
+- `changeUserRole` — validate transition, apply role change + side effects via util functions
+
+### Util Functions (planned, in `src/utils/roles.ts`)
+
+- `getActiveYear` — fetch active year, return null if none
+- `validateRoleTransition` — check actor permissions + valid transition pairs
+- Side effect helpers per transition (to be designed during implementation)
+
+---
+
+## 15. What's Next (in order)
+
+1. Role promotion/demotion dashboard endpoints (`/roles`) — design locked, ready to implement
+2. Tasks and scoring
+3. Leaderboard
+4. Testing suite

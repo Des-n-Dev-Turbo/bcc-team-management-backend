@@ -33,6 +33,7 @@ export const getTeamYearParticipants = async ({
     yearId,
     userId,
     role,
+    requestedTeamId: teamId,
   });
 
   const { data: participantsData, error: participantsError } = await db
