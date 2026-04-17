@@ -14,5 +14,6 @@
   "[json]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
-  "deno.enable": true
+  "deno.enable": true,
+  "biome.lsp.bin": "./node_modules/.bin/biome"
 }
