@@ -1,3 +1,4 @@
 .env*
 /BCC\ Team\ Management\ BE
+/node_modules
 # /AI\ Context

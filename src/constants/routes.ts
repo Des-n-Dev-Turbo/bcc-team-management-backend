@@ -41,6 +41,12 @@ export const ProfileRoutes = {
   Me: "/me",
 } as const;
 
+export const RolesRoutes = {
+  Base: "/roles",
+  GetUsers: "/users",
+  ChangeRole: "/:userId/role",
+} as const;
+
 export const ParticipantRoutes = {
   AddYearParticipant: "/",
   AddYearParticipantBulk: "/bulk",

@@ -1,0 +1,16 @@
+{
+  "dependencies": {
+    "hono": "^4.10.6",
+    "jose": "^6.1.2",
+    "@supabase/supabase-js": "^2.81.1",
+    "@biomejs/biome": "^2.4.12",
+    "@biomejs/cli-darwin-x64": "^2.4.12",
+    "@biomejs/cli-darwin-arm64": "^2.4.12",
+    "@biomejs/cli-win32-x64": "^2.4.12",
+    "@biomejs/cli-win32-arm64": "^2.4.12"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0"
+  }
+}

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import * as ROUTES from "@/constants/routes.ts";
 import profileRoutes from "@/routes/profile.routes.ts";
+import roleRoutes from "@/routes/roles.routes.ts";
 import teamMembershipsRouter from "@/routes/team_memberships.routes.ts";
 import teamRoutes from "@/routes/teams.routes.ts";
 import yearAccessRouter from "@/routes/year_access.routes.ts";
@@ -20,6 +21,8 @@ app.route(ROUTES.YearRoutes.Base, yearRoutes);
 app.route(ROUTES.YearAccessRoutes.Base, yearAccessRouter);
 
 app.route(ROUTES.TeamMembershipRoutes.Base, teamMembershipsRouter);
+
+app.route(ROUTES.RolesRoutes.Base, roleRoutes);
 
 app.onError((error, c) => {
   console.log(getErrorMessage(error));
