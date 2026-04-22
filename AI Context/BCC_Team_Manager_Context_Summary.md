@@ -353,6 +353,7 @@ Two modes controlled by optional `restoreAccess` query param:
   GET  /:yearId/participants               — paginated volunteer list
   GET  /:yearId/teams/:teamId/participants — team volunteer list (limit 50)
   GET  /:yearId/team-leads                 — all team leads incl. banned (admin+)
+  PATCH /:yearId/participants/:id
   PATCH /:yearId/participants/:id/ban
   PATCH /:yearId/participants/:id/unban
   PATCH /:yearId/participants/:id/disqualify
@@ -433,6 +434,7 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 ### Key Error Codes
 
 - UNAUTHORIZED, FORBIDDEN
+- PARTICIPANT_EMAIL_CONFLICT (409) — email already in use by another participant in the same year (returns conflicting participant name in data)
 - VALIDATION_ERROR (422)
 - YEAR_NOT_FOUND, YEAR_ALREADY_LOCKED
 - TEAM_EXISTS, TEAM_NOT_FOUND
@@ -444,6 +446,9 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 - YEAR_ACCESS_NOT_APPROVED (403) — added for promotion flow
 - NOT_A_TEAM_LEAD (400) — added for demotion flow
 - ROLE_OUT_OF_SYNC (409) — added for role change flow: body `currentRole` does not match DB `global_role`
+- INVALID_ROLE_TRANSITION (400) — added for role change flow: same role or invalid transition pair
+- ROLE_CHANGE_FAILED (500) — added for role change flow: DB update of `global_role` failed
+- APP_USERS_FETCH_FAILED (500), APP_USERS_NOT_FOUND (404) — added for Auth API `listUsers` in `getAllAppUsers` util
 - INTERNAL_SERVER_ERROR
 
 ---
@@ -526,7 +531,19 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 - `demoteFromTeamLead` service — validateTeamParticipants, isTeamLead check, sets `is_team_lead = false`
 - `PATCH /team-memberships/:membershipId/promote?yearId=xxx` route — admin+, body: `{ participantId, teamId }`
 - `PATCH /team-memberships/:membershipId/demote?yearId=xxx` route — admin+, body: `{ teamId }`
-- `/roles` dashboard — design fully locked, implementation pending (see Section 14)
+- `getAllAppUsers` utility in `src/utils/users.ts` — wraps Auth Admin API `listUsers`, accepts `allowNoUsers` flag
+- `getAppUsers` service — parallel: Auth API + profiles `.in(global_role, [viewer, user, admin])`, merged via Map, filtered by actor role
+- `updateUserRole` service — fetches target profile, verifies `currentRole` matches DB (409 `ROLE_OUT_OF_SYNC`), validates transition, applies side effects, updates `global_role`
+- `getActiveYear` util — queries `years` where `is_locked IS NULL OR false`, order `created_at DESC`, limit 1
+- `validateRoleTransition` util — checks same-role (400), valid transition set (400), admin vs superadmin-only transitions (403)
+- `applyRoleSideEffects` util — switch on `RoleTransition`, applies DB changes per transition matrix
+  - `viewer->user`: checks approved `year_access`, creates `year_participant` (`mobile: null`, ignores 23505)
+  - `user->viewer` / `user->admin`: deletes `team_membership` if exists, deletes `year_participant`
+  - `viewer->admin`: deletes `year_access` for active year
+  - `admin->viewer`: creates approved `year_access` if not already approved
+  - `admin->user`: creates approved `year_access` if not exists, then creates `year_participant` (`mobile: null`); if participant insert fails after `year_access` created, throws 500 with `data: { yearAccessCreation: true, yearParticipantCreation: false }` to surface partial state
+- `GET /roles/users` route — admin+, returns merged user list filtered by actor role
+- `PATCH /roles/:userId/role` route — admin+, `userId` from param (not body), body: `{ currentRole, targetRole }`
 
 ### Supabase RPC Functions
 
@@ -536,7 +553,7 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 
 ---
 
-## 14. Role Promotion/Demotion Dashboard — Design (Locked)
+## 14. Role Promotion/Demotion Dashboard — Built ✅
 
 ### Endpoints
 
@@ -547,11 +564,16 @@ PATCH /roles/:userId/role      — promote or demote a user (admin+)
 
 ### GET /roles/users
 
-- Auth Admin API `listUsers` (perPage: 1000) + `profiles` `.in(userIds)` — merged in memory
+- Parallel: Auth Admin API `listUsers` (perPage: 1000, via `getAllAppUsers`) + `profiles` `.in("global_role", [viewer, user, admin])`
+- Merged in memory via Map on `user.id`
 - **Admin** sees: viewer, user roles only
 - **Superadmin** sees: viewer, user, admin roles (superadmin excluded from management)
 
 ### PATCH /roles/:userId/role — Body: `{ currentRole, targetRole }`
+
+- `userId` comes from URL param — NOT from body
+- Fetches target user's actual `global_role` from `profiles` first
+- If `currentRole` in body does not match DB → 409 `ROLE_OUT_OF_SYNC`
 
 #### Role Change Permission Matrix
 
@@ -560,43 +582,40 @@ PATCH /roles/:userId/role      — promote or demote a user (admin+)
 | admin       | viewer ↔ user only                                           |
 | superadmin  | viewer ↔ user, viewer ↔ admin, user ↔ admin                  |
 
-- If actor is admin and tries to promote to/from admin → 403 FORBIDDEN
-- If `currentRole === targetRole` → 400 BAD_REQUEST
-- If transition is not in valid set → 400 BAD_REQUEST
-- If `currentRole` in body does not match actual `global_role` in DB → 409 ROLE_OUT_OF_SYNC
+- Same role → 400 `INVALID_ROLE_TRANSITION`
+- Invalid transition pair → 400 `INVALID_ROLE_TRANSITION`
+- Admin attempting admin-scoped transition → 403 `FORBIDDEN`
+- `currentRole` body mismatch with DB → 409 `ROLE_OUT_OF_SYNC`
 
 #### Side Effects Per Transition
 
-| Transition     | Side Effects                                                                                      |
-| -------------- | ------------------------------------------------------------------------------------------------- |
-| viewer → user  | Create `year_participant` for active year — only if active year exists AND viewer has approved `year_access` for it |
-| user → viewer  | Remove `team_membership` + `year_participant` for active year                                     |
-| viewer → admin | Update role, remove `year_access` for active year (if exists)                                     |
-| admin → viewer | Update role, create approved `year_access` for active year (if exists and not already approved)   |
-| user → admin   | Remove `team_membership` + `year_participant` for active year                                     |
-| admin → user   | Update role, create `year_participant` for active year (if active year exists)                    |
+| Transition     | Side Effects                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------- |
+| viewer → user  | Create `year_participant` (`mobile: null`, ignores 23505) — only if active year exists AND viewer has approved `year_access` |
+| user → viewer  | Delete `team_membership` (if exists) + delete `year_participant` for active year                              |
+| viewer → admin | Delete `year_access` for active year (if exists)                                                              |
+| admin → viewer | Create approved `year_access` for active year (if exists and not already approved)                            |
+| user → admin   | Delete `team_membership` (if exists) + delete `year_participant` for active year                              |
+| admin → user   | Create approved `year_access` (if not exists) + create `year_participant` (`mobile: null`, ignores 23505); partial failure surfaced via `data: { yearAccessCreation: true, yearParticipantCreation: false }` |
 
 #### Active Year Determination
 
-- Query `years` where `is_locked IS NULL OR is_locked = false`, order by `created_at DESC`, take first
-- If no active year exists — skip side effects that depend on it, proceed with role change only
+- Query `years` where `is_locked IS NULL OR is_locked = false`, order by `created_at DESC`, limit 1
+- If no active year — skip side effects that depend on it, proceed with role change only
 
-### Service Structure
+### Files
 
-- `getRolesDashboardUsers` — fetch and merge Auth API + profiles, filter by actor role
-- `changeUserRole` — fetch target user's actual `global_role` from `profiles`, verify it matches `currentRole` from body (409 `ROLE_OUT_OF_SYNC` if mismatch), validate transition, apply role change + side effects via util functions
-
-### Util Functions (planned, in `src/utils/roles.ts`)
-
-- `getActiveYear` — fetch active year, return null if none
-- `validateRoleTransition` — check actor permissions + valid transition pairs
-- Side effect helpers per transition (to be designed during implementation)
+- `src/utils/users.ts` — `getAllAppUsers(allowNoUsers?)` — shared Auth API wrapper
+- `src/utils/roles.ts` — `getActiveYear`, `validateRoleTransition`, `applyRoleSideEffects`
+- `src/services/roles.ts` — `getAppUsers`, `updateUserRole`
+- `src/routes/roles.routes.ts` — `GET /users`, `PATCH /:userId/role`
+- `src/schemas/roles.schema.ts` — `usersRoleChangeParamsSchema` (userId), `usersRoleChangeBodySchema` (currentRole, targetRole)
 
 ---
 
 ## 15. What's Next (in order)
 
-1. Role promotion/demotion dashboard endpoints (`/roles`) — design locked, ready to implement
+1. Update participant details — `PATCH /:yearId/participants/:id` (admin+)
 2. Tasks and scoring
 3. Leaderboard
 4. Testing suite

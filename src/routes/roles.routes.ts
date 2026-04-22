@@ -33,10 +33,16 @@ router.patch(
   validate("param", usersRoleChangeParamsSchema),
   validate("json", usersRoleChangeBodySchema),
   async (c) => {
-    const { currentRole, targetRole, profileId } = getValidated(
+    const { currentRole, targetRole } = getValidated(
       c,
       "json",
       usersRoleChangeBodySchema,
+    );
+
+    const { userId: profileId } = getValidated(
+      c,
+      "param",
+      usersRoleChangeParamsSchema,
     );
 
     const { global_role: userRole } = c.get("profile");

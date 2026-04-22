@@ -73,31 +73,32 @@ viewer < user < admin < superadmin
 - [x] List all approved year access users — `GET /year-access/users?yearId=xxx` (admin+, excludes banned, merges Auth API + profiles)
 - [ ] Notify user via email on approve/reject (Brevo)
 
-### 4.3a Role Promotion & Demotion (`/roles` dashboard) — Design Locked
+### 4.3a Role Promotion & Demotion (`/roles` dashboard) ✅ DONE
 
-- [ ] `GET /roles/users` — list users with global_role (admin+)
-  - Auth Admin API `listUsers` (perPage: 1000) + `profiles` `.in(userIds)` — merged in memory
+- [x] `GET /roles/users` — list users with global_role (admin+)
+  - Parallel: Auth Admin API `listUsers` (via `getAllAppUsers`) + `profiles` `.in("global_role", [viewer, user, admin])`
+  - Merged in memory via Map; filtered by actor role
   - Admin sees: viewer, user only
   - Superadmin sees: viewer, user, admin (superadmin excluded from management)
-- [ ] `PATCH /roles/:userId/role` — single endpoint, body: `{ currentRole, targetRole }` (admin+)
+- [x] `PATCH /roles/:userId/role` — single endpoint, `userId` from URL param, body: `{ currentRole, targetRole }` (admin+)
   - Fetches target user's actual `global_role` from `profiles` — verifies it matches `currentRole` from body
   - If mismatch → 409 `ROLE_OUT_OF_SYNC` (frontend state is stale)
   - Admin: viewer ↔ user only. Attempt to go beyond → 403
   - Superadmin: viewer ↔ user, viewer ↔ admin, user ↔ admin
-  - Same role → 400. Invalid pair → 400
+  - Same role → 400 `INVALID_ROLE_TRANSITION`. Invalid pair → 400 `INVALID_ROLE_TRANSITION`
 
-#### Side Effects Per Transition (all locked)
+#### Side Effects Per Transition (implemented)
 
 | Transition     | Side Effects |
 | -------------- | ------------ |
-| viewer → user  | Create `year_participant` for active year — only if active year exists AND viewer has approved `year_access` |
-| user → viewer  | Remove `team_membership` + `year_participant` for active year |
-| viewer → admin | Update role, remove `year_access` for active year (if exists) |
-| admin → viewer | Update role, create approved `year_access` for active year (if exists and not already approved) |
-| user → admin   | Remove `team_membership` + `year_participant` for active year |
-| admin → user   | Update role, create `year_participant` for active year (if active year exists) |
+| viewer → user  | Create `year_participant` (`mobile: null`, ignores 23505) — only if active year exists AND viewer has approved `year_access` |
+| user → viewer  | Delete `team_membership` (if exists) + delete `year_participant` for active year |
+| viewer → admin | Delete `year_access` for active year (if exists) |
+| admin → viewer | Create approved `year_access` for active year (if exists and not already approved) |
+| user → admin   | Delete `team_membership` (if exists) + delete `year_participant` for active year |
+| admin → user   | Create approved `year_access` (if not exists) + create `year_participant` (`mobile: null`); partial failure surfaced via `data: { yearAccessCreation: true, yearParticipantCreation: false }` |
 
-**Active year:** `years` where `is_locked IS NULL OR is_locked = false`, order `created_at DESC`, take first.
+**Active year:** `years` where `is_locked IS NULL OR is_locked = false`, order `created_at DESC`, limit 1.
 If no active year → skip dependent side effects, proceed with role change only.
 
 ### 4.4 Team Management
@@ -131,7 +132,7 @@ If no active year → skip dependent side effects, proceed with role change only
   - `restore_team_lead_access` RPC handles reinstatement atomically
 - [x] Disqualify participant (admin+) — visible in listings, excluded from leaderboard, team lead guard, unlocked year only
 - [x] Undisqualify participant (admin+) — sets disqualified=false, unlocked year only
-- [ ] Update participant details (admin+)
+- [ ] Update participant details (admin+) — `PATCH /:yearId/participants/:id`, partial update of name/email/mobile, email uniqueness enforced (409 `PARTICIPANT_EMAIL_CONFLICT` with conflicting name), year lock check, unlocked years only
 - [x] `GET /years/:yearId/team-leads` — staff dashboard (admin+)
   - Shows year_participants where user_id IS NOT NULL (includes banned)
   - Left join team_memberships — unassigned team leads show with null team
@@ -265,12 +266,12 @@ If no active year → skip dependent side effects, proceed with role change only
 - [x] `promoteToTeamLead` service + `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
 - [x] `demoteFromTeamLead` service + `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
 
-### Phase 4 — Role Promotion/Demotion Dashboard (IN PROGRESS)
+### Phase 4 — Role Promotion/Demotion Dashboard ✅ DONE
 
-- Design fully locked (see Section 4.3a)
-- [ ] `src/utils/roles.ts` — `getActiveYear`, `validateRoleTransition`, side effect helpers
-- [ ] `getRolesDashboardUsers` service + `GET /roles/users` route
-- [ ] `changeUserRole` service + `PATCH /roles/:userId/role` route
+- [x] `src/utils/users.ts` — `getAllAppUsers(allowNoUsers?)` shared Auth API wrapper
+- [x] `src/utils/roles.ts` — `getActiveYear`, `validateRoleTransition`, `applyRoleSideEffects`
+- [x] `getAppUsers` service + `GET /roles/users` route
+- [x] `updateUserRole` service + `PATCH /roles/:userId/role` route
 
 ### Phase 5 — Tasks & Scoring
 
@@ -356,6 +357,7 @@ If no active year → skip dependent side effects, proceed with role change only
   GET   /:yearId/participants               — paginated volunteer list (any with year access)
   GET   /:yearId/teams/:teamId/participants — team volunteer list (any with year access)
   GET   /:yearId/team-leads                 — all team leads incl. banned (admin+)
+  PATCH /:yearId/participants/:id               — update participant details (admin+)
   PATCH /:yearId/participants/:id/ban
   PATCH /:yearId/participants/:id/unban
   PATCH /:yearId/participants/:id/disqualify
@@ -407,7 +409,7 @@ If no active year → skip dependent side effects, proceed with role change only
 
 ## 9. What's Next (Immediate)
 
-1. Role promotion/demotion dashboard — design locked, building `src/utils/roles.ts` util functions next
+1. Update participant details — `PATCH /:yearId/participants/:id` (admin+)
 2. Tasks and scoring
 3. Leaderboard
 4. Testing suite

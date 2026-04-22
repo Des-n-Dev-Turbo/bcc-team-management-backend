@@ -136,7 +136,7 @@ export const applyRoleSideEffects = async (
           user_id: userId,
           name: profile.name ?? "",
           email: profile.email ?? "",
-          mobile: "",
+          mobile: null,
           banned: false,
           disqualified: false,
         });
@@ -146,6 +146,10 @@ export const applyRoleSideEffects = async (
           "Failed to create year participant",
           ERROR_CODES.YEAR_PARTICIPANT_CREATION_FAILED,
           500,
+          {
+            yearAccessCreation: false,
+            yearParticipantCreation: true,
+          },
         );
       }
       break;
@@ -266,6 +270,40 @@ export const applyRoleSideEffects = async (
     case "admin->user": {
       if (!activeYear) break;
 
+      const { data: existingAccess, error: fetchAccessError } = await db
+        .from(Table.YearAccess)
+        .select("id")
+        .eq("user_id", userId)
+        .eq("year_id", activeYear.id)
+        .eq("status", YearAccessStatus.APPROVED)
+        .maybeSingle();
+
+      if (fetchAccessError) {
+        throw new AppError(
+          "Failed to check year access",
+          ERROR_CODES.YEAR_ACCESS_FETCH_FAILED,
+          500,
+        );
+      }
+
+      if (!existingAccess) {
+        const { error: yearAccessInsertError } = await db
+          .from(Table.YearAccess)
+          .insert({
+            user_id: userId,
+            year_id: activeYear.id,
+            status: YearAccessStatus.APPROVED,
+          });
+
+        if (yearAccessInsertError) {
+          throw new AppError(
+            "Failed to create year access",
+            ERROR_CODES.YEAR_ACCESS_REQUEST_FAILED,
+            500,
+          );
+        }
+      }
+
       const { data: profile, error: profileError } = await db
         .from(Table.Profiles)
         .select("id, name, email")
@@ -287,7 +325,7 @@ export const applyRoleSideEffects = async (
           user_id: userId,
           name: profile.name ?? "",
           email: profile.email ?? "",
-          mobile: "",
+          mobile: null,
           banned: false,
           disqualified: false,
         });
@@ -297,6 +335,10 @@ export const applyRoleSideEffects = async (
           "Failed to create year participant",
           ERROR_CODES.YEAR_PARTICIPANT_CREATION_FAILED,
           500,
+          {
+            yearAccessCreation: true,
+            yearParticipantCreation: false,
+          },
         );
       }
       break;
