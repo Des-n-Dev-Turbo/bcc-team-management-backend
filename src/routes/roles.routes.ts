@@ -5,6 +5,7 @@ import {
   usersRoleChangeBodySchema,
   usersRoleChangeParamsSchema,
 } from "@/schemas/roles.schema.ts";
+import { getAppUsers, updateUserRole } from "@/services/roles.ts";
 import { type AppContext, Role } from "@/types";
 import { getValidated, validate } from "@/utils/validate.ts";
 
@@ -15,7 +16,13 @@ router.get(
   supabaseAuth,
   loadProfile,
   requireRole(Role.Admin),
-  async (c) => {},
+  async (c) => {
+    const { global_role: userRole } = c.get("profile");
+
+    const result = await getAppUsers({ userRole });
+
+    return c.json({ result });
+  },
 );
 
 router.patch(
@@ -26,14 +33,22 @@ router.patch(
   validate("param", usersRoleChangeParamsSchema),
   validate("json", usersRoleChangeBodySchema),
   async (c) => {
-    const { userId } = getValidated(c, "param", usersRoleChangeParamsSchema);
-    const { currentRole, targetRole } = getValidated(
+    const { currentRole, targetRole, profileId } = getValidated(
       c,
       "json",
       usersRoleChangeBodySchema,
     );
 
     const { global_role: userRole } = c.get("profile");
+
+    const result = await updateUserRole({
+      currentRole,
+      targetRole,
+      profileId,
+      userRole,
+    });
+
+    return c.json({ result });
   },
 );
 

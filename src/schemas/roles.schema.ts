@@ -9,4 +9,5 @@ export const usersRoleChangeParamsSchema = z.object({
 export const usersRoleChangeBodySchema = z.object({
   currentRole: z.enum([Role.Admin, Role.User, Role.Viewer]),
   targetRole: z.enum([Role.Admin, Role.User, Role.Viewer]),
+  profileId: uuidSchema,
 });

@@ -10,6 +10,7 @@ import {
   YearAccessStatus,
 } from "@/types";
 import { AppError } from "@/utils/error.ts";
+import { getAllAppUsers } from "@/utils/users.ts";
 
 export const requestYearAccess = async ({
   yearId,
@@ -197,29 +198,7 @@ export const getYearAccessRequests = async ({ yearId }: { yearId: string }) => {
     return { pending: [], approved: [], rejected: [] };
   }
 
-  const {
-    data: { users: allUsers },
-    error,
-  } = await db.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000,
-  });
-
-  if (error) {
-    throw new AppError(
-      "Failed to fetch all users",
-      ERROR_CODES.INTERNAL_SERVER_ERROR,
-      500,
-    );
-  }
-
-  if (!allUsers || allUsers.length === 0) {
-    throw new AppError(
-      "List of all users is unavailable",
-      ERROR_CODES.INTERNAL_SERVER_ERROR,
-      500,
-    );
-  }
+  const allUsers = await getAllAppUsers();
 
   const usersMap = new Map(
     allUsers.map((user) => [
@@ -458,15 +437,12 @@ export const getAllYearAccessProfiles = async ({
     (yearAccess) => yearAccess.user_id,
   ) as string[];
 
-  const [profilesFetch, usersFetch] = await Promise.all([
+  const [profilesFetch, allUsers] = await Promise.all([
     db.from(Table.Profiles).select("id, global_role").in("id", userIds),
-    db.auth.admin.listUsers({
-      page: 1,
-      perPage: 1000,
-    }),
+    getAllAppUsers(true),
   ]);
 
-  if (profilesFetch.error || usersFetch.error) {
+  if (profilesFetch.error) {
     throw new AppError(
       "Unable to fetch users with year access",
       ERROR_CODES.USERS_FETCH_FAILED,
@@ -474,7 +450,7 @@ export const getAllYearAccessProfiles = async ({
     );
   }
 
-  if (profilesFetch.data.length === 0 || usersFetch.data?.users?.length === 0) {
+  if (profilesFetch.data.length === 0 || allUsers.length === 0) {
     return [];
   }
 
@@ -492,7 +468,7 @@ export const getAllYearAccessProfiles = async ({
     }
   });
 
-  usersFetch.data.users.forEach((user) => {
+  allUsers.forEach((user) => {
     if (usersMap.has(user.id)) {
       const userData = usersMap.get(user.id);
 

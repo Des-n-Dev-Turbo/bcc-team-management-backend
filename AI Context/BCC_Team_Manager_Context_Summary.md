@@ -443,6 +443,7 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 - USER_NOT_REGISTERED (400) — added for promotion flow
 - YEAR_ACCESS_NOT_APPROVED (403) — added for promotion flow
 - NOT_A_TEAM_LEAD (400) — added for demotion flow
+- ROLE_OUT_OF_SYNC (409) — added for role change flow: body `currentRole` does not match DB `global_role`
 - INTERNAL_SERVER_ERROR
 
 ---
@@ -562,6 +563,7 @@ PATCH /roles/:userId/role      — promote or demote a user (admin+)
 - If actor is admin and tries to promote to/from admin → 403 FORBIDDEN
 - If `currentRole === targetRole` → 400 BAD_REQUEST
 - If transition is not in valid set → 400 BAD_REQUEST
+- If `currentRole` in body does not match actual `global_role` in DB → 409 ROLE_OUT_OF_SYNC
 
 #### Side Effects Per Transition
 
@@ -582,7 +584,7 @@ PATCH /roles/:userId/role      — promote or demote a user (admin+)
 ### Service Structure
 
 - `getRolesDashboardUsers` — fetch and merge Auth API + profiles, filter by actor role
-- `changeUserRole` — validate transition, apply role change + side effects via util functions
+- `changeUserRole` — fetch target user's actual `global_role` from `profiles`, verify it matches `currentRole` from body (409 `ROLE_OUT_OF_SYNC` if mismatch), validate transition, apply role change + side effects via util functions
 
 ### Util Functions (planned, in `src/utils/roles.ts`)
 

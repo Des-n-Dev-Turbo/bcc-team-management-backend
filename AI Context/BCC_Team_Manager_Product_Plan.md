@@ -80,6 +80,8 @@ viewer < user < admin < superadmin
   - Admin sees: viewer, user only
   - Superadmin sees: viewer, user, admin (superadmin excluded from management)
 - [ ] `PATCH /roles/:userId/role` — single endpoint, body: `{ currentRole, targetRole }` (admin+)
+  - Fetches target user's actual `global_role` from `profiles` — verifies it matches `currentRole` from body
+  - If mismatch → 409 `ROLE_OUT_OF_SYNC` (frontend state is stale)
   - Admin: viewer ↔ user only. Attempt to go beyond → 403
   - Superadmin: viewer ↔ user, viewer ↔ admin, user ↔ admin
   - Same role → 400. Invalid pair → 400
@@ -332,6 +334,7 @@ If no active year → skip dependent side effects, proceed with role change only
 | Roles — admin visibility scope         | Admin sees viewer/user only; superadmin sees viewer/user/admin            | Superadmin management out of scope for admin; superadmin role itself never manageable       |
 | Roles — invalid transition handling    | 400 BAD_REQUEST; same-role also 400                                       | Frontend prevents this; API enforces it independently                                       |
 | Roles — active year for side effects   | `is_locked IS NULL OR false`, order by `created_at DESC`, take first      | Business rule already guarantees at most one unlocked year                                  |
+| Roles — currentRole verification        | Fetch actual `global_role` from DB, compare to `currentRole` in body; 409 `ROLE_OUT_OF_SYNC` on mismatch | Frontend state may be stale; side effects must execute against verified state, not caller assumptions |
 | Roles — no active year                 | Skip dependent side effects, proceed with role change only                | Role is global; active year is contextual — missing year should not block role change       |
 | Team lead promotion error code         | `TEAM_LEAD_ALREADY_EXISTS` (chosen over `TEAM_LEAD_EXISTS`)               | More descriptive; frontend not yet built so no contract to break                                                                |
 
