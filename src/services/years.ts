@@ -3,6 +3,7 @@ import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib/supabase.ts";
 import { hasRequiredRole, Role, YearAccessStatus } from "@/types";
 import { AppError } from "@/utils/error.ts";
+import { validateYear } from "@/utils/years.ts";
 
 export const createYear = async ({
   name,
@@ -77,31 +78,10 @@ export const createYear = async ({
 export const lockYear = async (year: string) => {
   const db = getSupabase();
 
-  const { data: fetchYear, error: fetchError } = await db
-    .from(Table.Years)
-    .select("id, is_locked")
-    .eq("id", year)
-    .maybeSingle();
-
-  if (fetchError) {
-    throw new AppError(
-      "Failed to fetch year",
-      ERROR_CODES.YEAR_FETCH_FAILED,
-      500,
-    );
-  }
-
-  if (!fetchYear) {
-    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
-  }
-
-  if (fetchYear.is_locked) {
-    throw new AppError(
-      "Year is already locked",
-      ERROR_CODES.YEAR_ALREADY_LOCKED,
-      409,
-    );
-  }
+  await validateYear({
+    yearId: year,
+    yearLockedErrorMessage: "Year is already locked",
+  });
 
   const { data: lockedYear, error: lockedYearError } = await db
     .from(Table.Years)

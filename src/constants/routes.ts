@@ -55,5 +55,6 @@ export const ParticipantRoutes = {
   Unban: "/:participantId/unban",
   Disqualify: "/:participantId/disqualify",
   Undisqualify: "/:participantId/undisqualify",
+  UpdateYearParticipant: "/:participantId",
   GetTeamParticipants: "/:teamId/participants",
 } as const;

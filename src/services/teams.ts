@@ -2,39 +2,15 @@ import { Table } from "@/constants/common.ts";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
 import { AppError } from "@/utils/error.ts";
+import { validateYear } from "@/utils/years.ts";
 
 export const createTeam = async (teamName: string, yearId: string) => {
   const db = getSupabase();
 
-  const { data: yearData, error: yearError } = await db
-    .from(Table.Years)
-    .select("id, is_locked")
-    .eq("id", yearId)
-    .maybeSingle();
-
-  if (yearError) {
-    throw new AppError(
-      "Failed to fetch associated year",
-      ERROR_CODES.YEAR_FETCH_FAILED,
-      500,
-    );
-  }
-
-  if (!yearData) {
-    throw new AppError(
-      "Associated year not found",
-      ERROR_CODES.YEAR_NOT_FOUND,
-      404,
-    );
-  }
-
-  if (yearData.is_locked) {
-    throw new AppError(
-      "Cannot create team for a locked year",
-      ERROR_CODES.YEAR_ALREADY_LOCKED,
-      409,
-    );
-  }
+  const yearData = await validateYear({
+    yearId,
+    yearLockedErrorMessage: "Cannot create team for a locked year",
+  });
 
   const { data: createdTeam, error: createTeamError } = await db
     .from(Table.Teams)
@@ -109,35 +85,10 @@ export const updateTeamName = async (teamId: string, newName: string) => {
     throw new AppError("Team not found", ERROR_CODES.TEAM_NOT_FOUND, 404);
   }
 
-  const { data: yearData, error: yearError } = await db
-    .from(Table.Years)
-    .select("id, is_locked")
-    .eq("id", teamData.year_id)
-    .maybeSingle();
-
-  if (yearError) {
-    throw new AppError(
-      "Failed to fetch associated year",
-      ERROR_CODES.YEAR_FETCH_FAILED,
-      500,
-    );
-  }
-
-  if (!yearData) {
-    throw new AppError(
-      "Associated year not found",
-      ERROR_CODES.YEAR_NOT_FOUND,
-      404,
-    );
-  }
-
-  if (yearData.is_locked) {
-    throw new AppError(
-      "Cannot update team for a locked year",
-      ERROR_CODES.YEAR_ALREADY_LOCKED,
-      409,
-    );
-  }
+  await validateYear({
+    yearId: teamData.year_id,
+    yearLockedErrorMessage: "Cannot update team for a locked year",
+  });
 
   if (teamData.name === newName.trim()) {
     return teamData;
@@ -178,35 +129,10 @@ export const copyTeamsToYear = async ({
 }) => {
   const db = getSupabase();
 
-  const { data: yearData, error: yearError } = await db
-    .from(Table.Years)
-    .select("id, is_locked")
-    .eq("id", yearId)
-    .maybeSingle();
-
-  if (yearError) {
-    throw new AppError(
-      "Failed to fetch associated year",
-      ERROR_CODES.YEAR_FETCH_FAILED,
-      500,
-    );
-  }
-
-  if (!yearData) {
-    throw new AppError(
-      "Associated year not found",
-      ERROR_CODES.YEAR_NOT_FOUND,
-      404,
-    );
-  }
-
-  if (yearData.is_locked) {
-    throw new AppError(
-      "Cannot create team for a locked year",
-      ERROR_CODES.YEAR_ALREADY_LOCKED,
-      409,
-    );
-  }
+  await validateYear({
+    yearId,
+    yearLockedErrorMessage: "Cannot copy teams to a locked year",
+  });
 
   const { data: previousYearTeamsData, error: previousYearTeamsError } =
     await db.from(Table.Teams).select("id, year_id, name").in("id", teamIds);

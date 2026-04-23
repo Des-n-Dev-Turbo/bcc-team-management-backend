@@ -132,7 +132,7 @@ If no active year → skip dependent side effects, proceed with role change only
   - `restore_team_lead_access` RPC handles reinstatement atomically
 - [x] Disqualify participant (admin+) — visible in listings, excluded from leaderboard, team lead guard, unlocked year only
 - [x] Undisqualify participant (admin+) — sets disqualified=false, unlocked year only
-- [ ] Update participant details (admin+) — `PATCH /:yearId/participants/:id`, partial update of name/email/mobile, email uniqueness enforced (409 `PARTICIPANT_EMAIL_CONFLICT` with conflicting name), year lock check, unlocked years only
+- [x] Update participant details (admin+) — `PATCH /:yearId/participants/:id`, partial update of name/email/mobile, email uniqueness enforced (409 `PARTICIPANT_EMAIL_CONFLICT` with conflicting name), year lock check, unlocked years only
 - [x] `GET /years/:yearId/team-leads` — staff dashboard (admin+)
   - Shows year_participants where user_id IS NOT NULL (includes banned)
   - Left join team_memberships — unassigned team leads show with null team
@@ -409,7 +409,6 @@ If no active year → skip dependent side effects, proceed with role change only
 
 ## 9. What's Next (Immediate)
 
-1. Update participant details — `PATCH /:yearId/participants/:id` (admin+)
-2. Tasks and scoring
-3. Leaderboard
-4. Testing suite
+1. Tasks and scoring
+2. Leaderboard
+3. Testing suite

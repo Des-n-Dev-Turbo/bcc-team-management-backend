@@ -56,3 +56,18 @@ export const yearParticipantsUnbanParamsSchema =
 export const yearParticipantsUnbanQuerySchema = zod.object({
   restoreAuth: zod.stringbool().optional(),
 });
+
+export const yearParticipantsUpdateParamsSchema =
+  yearParticipantsBanParamsSchema;
+
+export const yearParticipantsUpdateBodySchema = zod.object({
+  name: nameSchema.optional(),
+  email: zod.email().optional(),
+  mobile: zod
+    .string()
+    .trim()
+    .length(10)
+    .regex(/^\d{10}$/)
+    .optional(),
+  regId: zod.string().trim().min(5).max(12).optional(),
+});

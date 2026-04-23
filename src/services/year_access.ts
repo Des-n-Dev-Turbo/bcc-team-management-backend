@@ -11,6 +11,7 @@ import {
 } from "@/types";
 import { AppError } from "@/utils/error.ts";
 import { getAllAppUsers } from "@/utils/users.ts";
+import { validateYear } from "@/utils/years.ts";
 
 export const requestYearAccess = async ({
   yearId,
@@ -21,31 +22,10 @@ export const requestYearAccess = async ({
 }) => {
   const db = getSupabase();
 
-  const { data: yearData, error: yearError } = await db
-    .from(Table.Years)
-    .select("id, name, is_locked")
-    .eq("id", yearId)
-    .maybeSingle();
-
-  if (yearError) {
-    throw new AppError(
-      "Failed to fetch year",
-      ERROR_CODES.YEAR_FETCH_FAILED,
-      500,
-    );
-  }
-
-  if (!yearData) {
-    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
-  }
-
-  if (yearData.is_locked) {
-    throw new AppError(
-      "Year is already locked",
-      ERROR_CODES.YEAR_ALREADY_LOCKED,
-      409,
-    );
-  }
+  const yearData = await validateYear({
+    yearId,
+    yearLockedErrorMessage: "Cannot request year access for a locked year",
+  });
 
   const { data: yearAccessData, error: yearAccessError } = await db
     .from(Table.YearAccess)

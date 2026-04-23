@@ -208,6 +208,7 @@ viewer < user < admin < superadmin
 - Filter method: `.ilike('field', '%value%')` — contains, case-insensitive — for all filter fields
 - Role enforcement for restricted params is done in the **service layer** — restricted params are silently ignored based on role, not rejected with 403
 - The API enforces param restrictions independently of the frontend
+- **Only one filter applies at a time (intentional)** — priority order: `email` → `mobile` → `name` for admin+; `name` only for viewer/user. If multiple params are sent, lower-priority ones are silently ignored. This is a deliberate product decision, not a bug.
 
 ### Banning Logic
 
@@ -505,11 +506,13 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 - Teams — create, get, update, copy to new year
 - Year participants — single add, bulk CSV upload
 - Year access — request, approve, reject, get all requests
+- `validateYear({ yearId, yearLockedErrorMessage? })` shared utility in `src/utils/years.ts` — verifies year exists (404 `YEAR_NOT_FOUND`), verifies year is not locked (409 `YEAR_ALREADY_LOCKED`), returns year data. Used across all services that require year validation. `yearLockedErrorMessage` is optional — defaults to generic message if omitted.
 - Shared utilities — `getRequesterTeam`, `applyPrivacyMask` in `src/utils/participants.ts`
 - `getYearParticipants` service + `GET /years/:yearId/participants` route
 - `getTeamYearParticipants` service + `GET /years/:yearId/teams/:teamId/participants` route
 - Ban/Unban — complete with Pardon vs Reinstatement pattern, RPC functions, partial success
 - Disqualify/Undisqualify
+- `updateYearParticipant` service + `PATCH /:yearId/participants/:participantId` route --- admin+, partial update of name/email/mobile/regId, empty payload guard (400 `BAD_REQUEST`), email uniqueness check only when email present (409 `YEAR_PARTICIPANT_EMAIL_MISMATCH` with `conflictingParticipantName` in data), year lock enforced
 - `getTeamLeadsForYear` service + `GET /years/:yearId/team-leads` route
 - `addParticipantToTeam` service + `POST /team-memberships?yearId=xxx` route
 - `validateTeamParticipants` shared utility in `src/utils/team_memberships.ts`
@@ -547,9 +550,10 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 
 ### Supabase RPC Functions
 
-- `ban_team_lead(p_participant_id, p_user_id, p_year_id)`
-- `unban_participant(p_participant_id)`
-- `restore_team_lead_access(p_user_id, p_year_id)`
+- `ban_volunteer(p_participant_id)` — sets `banned = true` on `year_participants`, deletes `team_memberships`, soft-deletes `score_events` (`is_deleted = true`)
+- `ban_team_lead(p_participant_id, p_user_id, p_year_id)` — sets `banned = true` on `year_participants`, saves `global_role` to `previous_role` and demotes to `viewer` on `profiles`, deletes `team_memberships`, deletes `year_access` for that year only
+- `unban_participant(p_participant_id)` — sets `banned = false` on `year_participants`, restores `score_events` (`is_deleted = false`)
+- `restore_team_lead_access(p_user_id, p_year_id)` — restores `global_role` from `previous_role` (throws if null), clears `previous_role`, inserts approved `year_access` for the given year
 
 ---
 
@@ -615,7 +619,6 @@ PATCH /roles/:userId/role      — promote or demote a user (admin+)
 
 ## 15. What's Next (in order)
 
-1. Update participant details — `PATCH /:yearId/participants/:id` (admin+)
-2. Tasks and scoring
-3. Leaderboard
-4. Testing suite
+1. Tasks and scoring
+2. Leaderboard
+3. Testing suite

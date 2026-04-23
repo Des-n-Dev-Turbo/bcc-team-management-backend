@@ -15,6 +15,8 @@ import {
   yearParticipantsSchema,
   yearParticipantsUnbanParamsSchema,
   yearParticipantsUnbanQuerySchema,
+  yearParticipantsUpdateBodySchema,
+  yearParticipantsUpdateParamsSchema,
 } from "@/schemas/year_participants.schema.ts";
 import {
   addYearParticipant,
@@ -24,6 +26,7 @@ import {
   getYearsParticipants,
   unbanParticipant,
   undisqualifyParticipant,
+  updateYearParticipant,
 } from "@/services";
 import { type AppContext, Role } from "@/types";
 import { AppError } from "@/utils/error.ts";
@@ -219,6 +222,26 @@ yearsParticipantRouter.patch(
     const params = getValidated(c, "param", yearParticipantsBanParamsSchema);
 
     const result = await undisqualifyParticipant(params);
+
+    return c.json(result, 200);
+  },
+);
+
+yearsParticipantRouter.patch(
+  ParticipantRoutes.UpdateYearParticipant,
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate("param", yearParticipantsUpdateParamsSchema),
+  validate("json", yearParticipantsUpdateBodySchema),
+  async (c) => {
+    const params = getValidated(c, "param", yearParticipantsUpdateParamsSchema);
+    const data = getValidated(c, "json", yearParticipantsUpdateBodySchema);
+
+    const result = await updateYearParticipant({
+      ...params,
+      ...data,
+    });
 
     return c.json(result, 200);
   },

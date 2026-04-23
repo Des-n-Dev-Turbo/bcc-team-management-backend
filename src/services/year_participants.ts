@@ -20,6 +20,7 @@ import {
   banVolunteer,
   getRequesterTeam,
 } from "@/utils/participants.ts";
+import { validateYear } from "@/utils/years.ts";
 
 export const addYearParticipant = async ({
   yearId,
@@ -38,31 +39,10 @@ export const addYearParticipant = async ({
 }) => {
   const db = getSupabase();
 
-  const { data: fetchYear, error: fetchYearError } = await db
-    .from(Table.Years)
-    .select()
-    .eq("id", yearId)
-    .maybeSingle();
-
-  if (fetchYearError) {
-    throw new AppError(
-      "Failed to fetch year",
-      ERROR_CODES.YEAR_FETCH_FAILED,
-      500,
-    );
-  }
-
-  if (!fetchYear) {
-    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
-  }
-
-  if (fetchYear.is_locked) {
-    throw new AppError(
-      "Year is locked. Cannot add participants.",
-      ERROR_CODES.YEAR_ALREADY_LOCKED,
-      409,
-    );
-  }
+  await validateYear({
+    yearId,
+    yearLockedErrorMessage: "Cannot add participants to a locked year",
+  });
 
   let disqualifiedDetails = null;
 
@@ -151,31 +131,10 @@ export const bulkAddYearParticipants = async ({
 }): Promise<BulkAddResult> => {
   const db = getSupabase();
 
-  const { data: fetchYear, error: fetchYearError } = await db
-    .from(Table.Years)
-    .select()
-    .eq("id", yearId)
-    .maybeSingle();
-
-  if (fetchYearError) {
-    throw new AppError(
-      "Failed to fetch year",
-      ERROR_CODES.YEAR_FETCH_FAILED,
-      500,
-    );
-  }
-
-  if (!fetchYear) {
-    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
-  }
-
-  if (fetchYear.is_locked) {
-    throw new AppError(
-      "Year is locked. Cannot add participants.",
-      ERROR_CODES.YEAR_ALREADY_LOCKED,
-      409,
-    );
-  }
+  await validateYear({
+    yearId,
+    yearLockedErrorMessage: "Cannot add participants to a locked year",
+  });
 
   const succeededRows: BulkSucceededRow[] = [];
   const failedRows: BulkFailedRow[] = [];
@@ -467,7 +426,6 @@ export const getYearsParticipants = async ({
   const participantsData = (data ?? []).map((item) => {
     return {
       id: item.id,
-      team_member_id: item.team_memberships[0]?.id ?? null,
       name: item.name,
       email: item.email,
       mobile: item.mobile,
@@ -498,6 +456,8 @@ export const banParticipant = async ({
   participantId: string;
 }): Promise<ParticipantBanResult> => {
   const db = getSupabase();
+
+  await validateYear({ yearId });
 
   const { data: fetchYearParticipant, error: fetchYearParticipantError } =
     await db
@@ -586,6 +546,8 @@ export const unbanParticipant = async ({
   restoreCompleteAccess?: boolean;
 }): Promise<ParticipantUnbanResult> => {
   const db = getSupabase();
+
+  await validateYear({ yearId });
 
   const { data: participantData, error: participantError } = await db
     .from(Table.YearParticipants)
@@ -722,31 +684,10 @@ export const disqualifyParticipant = async ({
 }) => {
   const db = getSupabase();
 
-  const { data: yearData, error: yearError } = await db
-    .from(Table.Years)
-    .select("id, is_locked")
-    .eq("id", yearId)
-    .maybeSingle();
-
-  if (yearError) {
-    throw new AppError(
-      "Failed to fetch year",
-      ERROR_CODES.YEAR_FETCH_FAILED,
-      500,
-    );
-  }
-
-  if (!yearData) {
-    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
-  }
-
-  if (yearData.is_locked) {
-    throw new AppError(
-      "Year is locked. Cannot disqualify participants.",
-      ERROR_CODES.YEAR_ALREADY_LOCKED,
-      409,
-    );
-  }
+  await validateYear({
+    yearId,
+    yearLockedErrorMessage: "Cannot disqualify a participant for a locked year",
+  });
 
   const { data: participantData, error: participantError } = await db
     .from(Table.YearParticipants)
@@ -815,31 +756,11 @@ export const undisqualifyParticipant = async ({
 }) => {
   const db = getSupabase();
 
-  const { data: yearData, error: yearError } = await db
-    .from(Table.Years)
-    .select("id, is_locked")
-    .eq("id", yearId)
-    .maybeSingle();
-
-  if (yearError) {
-    throw new AppError(
-      "Failed to fetch year",
-      ERROR_CODES.YEAR_FETCH_FAILED,
-      500,
-    );
-  }
-
-  if (!yearData) {
-    throw new AppError("Year not found", ERROR_CODES.YEAR_NOT_FOUND, 404);
-  }
-
-  if (yearData.is_locked) {
-    throw new AppError(
-      "Year is locked. Cannot undisqualify participants.",
-      ERROR_CODES.YEAR_ALREADY_LOCKED,
-      409,
-    );
-  }
+  await validateYear({
+    yearId,
+    yearLockedErrorMessage:
+      "Cannot undisqualify a participant for a locked year",
+  });
 
   const { data: participantData, error: participantError } = await db
     .from(Table.YearParticipants)
@@ -942,4 +863,122 @@ export const getTeamLeadsForYear = async (yearId: string) => {
   }));
 
   return teamLeads;
+};
+
+export const updateYearParticipant = async ({
+  yearId,
+  participantId,
+  name,
+  email,
+  mobile,
+  regId,
+}: {
+  yearId: string;
+  participantId: string;
+  name?: string;
+  email?: string;
+  mobile?: string;
+  regId?: string;
+}) => {
+  const db = getSupabase();
+
+  await validateYear({
+    yearId,
+    yearLockedErrorMessage: "Cannot update participant for a locked year",
+  });
+
+  const { data: participantData, error: participantError } = await db
+    .from(Table.YearParticipants)
+    .select(
+      "id, year_id, name, mobile, email, reg_id, user_id, banned, disqualified",
+    )
+    .eq("id", participantId)
+    .eq("year_id", yearId)
+    .maybeSingle();
+
+  if (participantError) {
+    throw new AppError(
+      "Failed to fetch participant",
+      ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
+      500,
+    );
+  }
+
+  if (!participantData) {
+    throw new AppError(
+      "Participant not found",
+      ERROR_CODES.YEAR_PARTICIPANT_NOT_FOUND,
+      404,
+    );
+  }
+
+  if (email) {
+    const { data: emailYearParticipantData, error: emailYearParticipantError } =
+      await db
+        .from(Table.YearParticipants)
+        .select("id, name")
+        .eq("email", email)
+        .eq("year_id", yearId)
+        .maybeSingle();
+
+    if (emailYearParticipantError) {
+      throw new AppError(
+        "Failed to fetch participant",
+        ERROR_CODES.YEAR_PARTICIPANT_FETCH_FAILED,
+        500,
+      );
+    }
+
+    if (
+      emailYearParticipantData &&
+      emailYearParticipantData.id !== participantId
+    ) {
+      throw new AppError(
+        "This email already belongs to a different participant",
+        ERROR_CODES.YEAR_PARTICIPANT_EMAIL_MISMATCH,
+        409,
+        { conflictingParticipantName: emailYearParticipantData.name },
+      );
+    }
+  }
+
+  const updatePayload: Partial<{
+    name: string;
+    email: string;
+    mobile: string;
+    reg_id: string;
+  }> = {};
+
+  if (name !== undefined) updatePayload.name = name;
+  if (email !== undefined) updatePayload.email = email;
+  if (mobile !== undefined) updatePayload.mobile = mobile;
+  if (regId !== undefined) updatePayload.reg_id = regId;
+
+  if (Object.keys(updatePayload).length === 0) {
+    throw new AppError(
+      "No fields provided for update",
+      ERROR_CODES.BAD_REQUEST,
+      400,
+    );
+  }
+
+  const { data: updatedParticipant, error: updateError } = await db
+    .from(Table.YearParticipants)
+    .update(updatePayload)
+    .eq("id", participantId)
+    .eq("year_id", yearId)
+    .select(
+      "id, year_id, name, mobile, email, reg_id, user_id, banned, disqualified",
+    )
+    .single();
+
+  if (updateError) {
+    throw new AppError(
+      "Failed to update participant",
+      ERROR_CODES.YEAR_PARTICIPANT_UPDATE_FAILED,
+      500,
+    );
+  }
+
+  return updatedParticipant;
 };
