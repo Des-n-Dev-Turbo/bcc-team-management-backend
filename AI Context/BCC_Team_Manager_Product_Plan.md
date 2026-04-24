@@ -186,14 +186,49 @@ If no active year → skip dependent side effects, proceed with role change only
 
 ### 4.8 Tasks & Scoring
 
-- [ ] Create team-level task (team lead for own team, admin+)
-- [ ] Create year-level task (admin+)
-- [ ] Get tasks for a year/team
-- [ ] Award base score (0–10) to participant (team lead for own team, admin+)
-- [ ] Award medal (gold/silver/bronze) — one per participant per task
-- [ ] Award bonus — stackable, +1 each
-- [ ] Edit base score — admin only
-- [ ] Get score events for a participant
+- [ ] Create global task — admin+ (`team_id: null`)
+- [ ] Create team-scoped task — admin+ or team lead for own team
+- [ ] Get tasks + scores for a year/team — returns `{ tasks, scores }`, participant data served separately from `getTeamYearParticipants`
+- [ ] Award score to single participant — team lead for own team (all event types)
+- [ ] Award scores to multiple participants for a task (bulk) — team lead for own team, all-or-nothing (no partial inserts)
+- [ ] Edit base score value — admin only (PATCH)
+
+#### Scoring Rules (Locked)
+
+- One base score per participant per task
+- One medal per participant per task
+- Medal uniqueness per task per team — only one gold, one silver, one bronze across all team participants for a given task
+- Medal uniqueness is task-scoped — same participant can hold gold on T1 and gold on T2
+- Medal uniqueness is team-scoped — Team A's medals for T1 independent of Team B's
+- Bonus rows are unlimited
+- Score event types: `base | gold | silver | bronze | bonus`
+- Score values: gold +5, silver +3, bronze +2, bonus +1, base 0–N
+
+#### GET /tasks Response Shape
+
+Frontend already holds participant data from `getTeamYearParticipants`. Tasks endpoint returns:
+
+```ts
+{
+  tasks: [{ id, title, max_base_score, team_id }],
+  scores: {
+    [taskId]: {
+      [yearParticipantId]: {
+        base: number | null,
+        medal: "gold" | "silver" | "bronze" | null,
+        bonus_count: number
+      }
+    }
+  }
+}
+```
+
+#### Data Fetching Strategy
+
+Two queries — participants and tasks are independent, N+1 not viable:
+- Q1: participant IDs (internal only) via `team_memberships → year_participants`, `user_id IS NULL`
+- Q2: `tasks` LEFT JOIN `score_events`, filtered by `year_id`, `team_id OR null`, `year_participant_id IN [Q1 ids]`
+- Service layer aggregates flat rows into nested score map, merged into response
 
 ### 4.9 Leaderboard
 
@@ -389,7 +424,13 @@ If no active year → skip dependent side effects, proceed with role change only
   PATCH /:userId/role                       — promote or demote, body: { currentRole, targetRole } (admin+)
 
 /tasks                                      — PLANNED
+  POST  /                                   — create task (admin+ or team lead for own team)
+  GET   /?yearId=xxx&teamId=xxx             — fetch tasks + scores (viewer+)
+
 /scores                                     — PLANNED
+  POST  /                                   — award score to single participant (team lead+)
+  POST  /bulk                               — award scores to multiple participants for a task (team lead+), all-or-nothing
+  PATCH /:scoreEventId                      — edit base score value (admin only)
 /leaderboard                                — PLANNED
 /audit-logs                                 — PLANNED
 ```

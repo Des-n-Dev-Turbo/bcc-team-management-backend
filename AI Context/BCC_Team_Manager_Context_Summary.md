@@ -261,11 +261,19 @@ Two modes controlled by optional `restoreAccess` query param:
 
 ### Scoring
 
-- base: 0–10
+- base: 0–N (max_base_score defined per task)
 - gold: +5, silver: +3, bronze: +2, bonus: +1
-- Only 1 medal per participant per task
-- Bonus can stack
-- Admin can edit base score only
+- One base score per participant per task
+- One medal per participant per task (participant cannot hold two medals on the same task)
+- Medal uniqueness per task per team — only one gold, one silver, one bronze across all participants in a team for a given task
+- Medal uniqueness is task-scoped, not global — same participant can hold gold on T1 and gold on T2
+- Medal uniqueness is team-scoped — Team A's medals for T1 are fully independent of Team B's
+- Bonus can stack (unlimited bonus rows)
+- Admin can edit base score value only (PATCH)
+- Team lead can award all score types for own team participants
+- Bulk scoring fails entirely if any validation fails — no partial inserts
+- Score events stored in `score_events` table — auditable, reversible
+- Soft-deleted on participant ban (`is_deleted = true`), restored on unban
 
 ### Task Scoping & Ghost Points
 
@@ -388,6 +396,15 @@ Two modes controlled by optional `restoreAccess` query param:
 /roles
   GET   /users            — list users with global_role (admin sees viewer/user, superadmin sees viewer/user/admin)
   PATCH /:userId/role     — promote or demote user, body: { currentRole, targetRole } (admin+)
+
+/tasks
+  POST  /                              — create task (admin+ or team lead for own team)
+  GET   /?yearId=xxx&teamId=xxx        — fetch tasks + scores (viewer+)
+
+/scores
+  POST  /                              — award score to single participant (team lead+)
+  POST  /bulk                          — award scores to multiple participants for a task (team lead+), all-or-nothing
+  PATCH /:scoreEventId                 — edit base score value (admin only)
 ```
 
 ---
