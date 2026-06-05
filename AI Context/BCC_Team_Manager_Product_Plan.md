@@ -184,14 +184,14 @@ If no active year → skip dependent side effects, proceed with role change only
 - [ ] year_participant created for most recent year if approved year_access exists at promotion time
 - [ ] Team assignment is a separate explicit step — creates team_membership with is_team_lead = true
 
-### 4.8 Tasks & Scoring
+### 4.8 Tasks & Scoring ✅ DONE
 
-- [ ] Create global task — admin+ (`team_id: null`)
-- [ ] Create team-scoped task — admin+ or team lead for own team
-- [ ] Get tasks + scores for a year/team — returns `{ tasks, scores }`, participant data served separately from `getTeamYearParticipants`
-- [ ] Award score to single participant — team lead for own team (all event types)
-- [ ] Award scores to multiple participants for a task (bulk) — team lead for own team, all-or-nothing (no partial inserts)
-- [ ] Edit base score value — admin only (PATCH)
+- [x] Create global task — admin+ (`team_id: null`)
+- [x] Create team-scoped task — admin+ or team lead for own team
+- [x] Get tasks + scores for a year/team — returns `{ tasks, scores }`, participant data served separately from `getTeamYearParticipants`
+- [x] Award score to single participant — team lead for own team (all event types)
+- [x] Award scores to multiple participants for a task (bulk) — team lead for own team, all-or-nothing (no partial inserts)
+- [x] Edit base score value — admin only (PATCH)
 
 #### Scoring Rules (Locked)
 
@@ -308,12 +308,24 @@ Two queries — participants and tasks are independent, N+1 not viable:
 - [x] `getAppUsers` service + `GET /roles/users` route
 - [x] `updateUserRole` service + `PATCH /roles/:userId/role` route
 
-### Phase 5 — Tasks & Scoring
+### Phase 5 — Tasks & Scoring ✅ DONE
 
-- Task creation (team-level and year-level)
-- Score event recording
-- Score editing rules (admin base only)
-- Medal and bonus logic
+- [x] `src/schemas/tasks.schema.ts` — `createTaskQuerySchema` (yearId), `createTaskBodySchema` (title, maxBaseScore, teamId?), `getTasksQuerySchema` (yearId + teamId)
+- [x] `src/schemas/scores.schema.ts` — `eventTypeSchema`, `scoreQuerySchema`, `awardScoreBodySchema`, `bulkAwardScoreBodySchema`, `bulkScoreEntrySchema`, `editScoreParamsSchema`, `editScoreBodySchema`
+- [x] `verifyTeamLead({ userId, yearId, teamId })` utility in `src/services/tasks.service.ts` — inner-joins `year_participants → team_memberships`, returns boolean
+- [x] `createTask` service — inserts into `tasks` with `year_id`, `title`, `max_base_score`, `team_id` (null for global)
+- [x] `getTasksWithScores` service — two-query strategy: Q1 resolves scorable participant IDs (`user_id IS NULL`, `is_deleted = false`); Q2 fetches tasks LEFT JOIN score_events filtered by `year_id`, `team_id OR null`, participant IDs; service layer aggregates flat events into `{ [taskId]: { [participantId]: { base, medal, bonus_count } } }`
+- [x] `awardScore` service — verifies participant belongs to team, checks one-base constraint, checks one-medal-per-participant constraint, checks team-level medal uniqueness (separate `assertMedalNotTaken` async helper), inserts score event
+- [x] `bulkAwardScores` service — all-or-nothing: verifies all participants belong to team, fetches all existing events upfront, validates every row against base/medal/medal-uniqueness constraints before any insert, tracks intra-batch medal collisions via `batchMedals` Set
+- [x] `editBaseScore` service — fetches event, verifies not deleted, verifies `event_type === 'base'`, updates value
+- [x] `POST /tasks?yearId=xxx` route — `requireRole(User)` + `requireYearAccess`, in-handler: admin+ allowed always; User role must pass `verifyTeamLead` for provided `teamId`; global task (no `teamId`) requires admin+
+- [x] `GET /tasks?yearId=xxx&teamId=xxx` route — `requireRole(Viewer)` + `requireYearAccess`
+- [x] `POST /scores?yearId=xxx&teamId=xxx` route — `requireRole(User)`, in-handler `verifyTeamLead` check
+- [x] `POST /scores/bulk?yearId=xxx&teamId=xxx` route — `requireRole(User)`, in-handler `verifyTeamLead` check
+- [x] `PATCH /scores/:scoreEventId` route — `requireRole(Admin)` only
+- [x] New error codes — `TASK_NOT_FOUND`, `TASK_FETCH_FAILED`, `TASK_CREATION_FAILED`, `SCORE_AWARD_FAILED`, `SCORE_EDIT_FAILED`, `SCORE_EVENT_NOT_FOUND`, `SCORE_FETCH_FAILED`, `SCORE_DUPLICATE_BASE`, `SCORE_DUPLICATE_MEDAL`, `MEDAL_TAKEN`, `NOT_TEAM_LEAD`, `PARTICIPANT_NOT_IN_TEAM`
+- [x] `TaskRoutes`, `ScoreRoutes` added to `src/constants/routes.ts`
+- [x] `/tasks` and `/scores` routers registered in `src/main.ts`
 
 ### Phase 6 — Leaderboard
 
@@ -423,14 +435,15 @@ Two queries — participants and tasks are independent, N+1 not viable:
   GET   /users                              — list users with global_role, filtered by actor role (admin+)
   PATCH /:userId/role                       — promote or demote, body: { currentRole, targetRole } (admin+)
 
-/tasks                                      — PLANNED
-  POST  /                                   — create task (admin+ or team lead for own team)
+/tasks
+  POST  /?yearId=xxx                        — create task (admin+ or team lead for own team)
   GET   /?yearId=xxx&teamId=xxx             — fetch tasks + scores (viewer+)
 
-/scores                                     — PLANNED
-  POST  /                                   — award score to single participant (team lead+)
-  POST  /bulk                               — award scores to multiple participants for a task (team lead+), all-or-nothing
+/scores
+  POST  /?yearId=xxx&teamId=xxx             — award score to single participant (team lead+)
+  POST  /bulk?yearId=xxx&teamId=xxx         — award scores to multiple participants for a task (team lead+), all-or-nothing
   PATCH /:scoreEventId                      — edit base score value (admin only)
+
 /leaderboard                                — PLANNED
 /audit-logs                                 — PLANNED
 ```
@@ -450,6 +463,5 @@ Two queries — participants and tasks are independent, N+1 not viable:
 
 ## 9. What's Next (Immediate)
 
-1. Tasks and scoring
-2. Leaderboard
-3. Testing suite
+1. Leaderboard
+2. Testing suite

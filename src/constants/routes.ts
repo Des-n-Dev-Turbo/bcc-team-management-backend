@@ -58,3 +58,16 @@ export const ParticipantRoutes = {
   UpdateYearParticipant: "/:participantId",
   GetTeamParticipants: "/:teamId/participants",
 } as const;
+
+export const TaskRoutes = {
+  Base: "/tasks",
+  CreateTask: "/",
+  GetTasks: "/",
+} as const;
+
+export const ScoreRoutes = {
+  Base: "/scores",
+  AwardScore: "/",
+  BulkAwardScore: "/bulk",
+  EditScore: "/:scoreEventId",
+} as const;

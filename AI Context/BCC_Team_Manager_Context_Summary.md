@@ -388,23 +388,26 @@ Two modes controlled by optional `restoreAccess` query param:
   PATCH /:id/approve              — approve request (admin+)
   PATCH /:id/reject               — reject request (admin+)
   DELETE /:userId/remove?yearId=xxx — remove year access + cascade cleanup (admin+)
+
+/roles
+  GET  /users             — list users with global_role (admin+)
+  PATCH /:userId/role     — promote or demote user, body: { currentRole, targetRole } (admin+)
+
+/tasks
+  POST /?yearId=xxx                    — create task (admin+ or team lead for own team)
+  GET  /?yearId=xxx&teamId=xxx         — fetch tasks + scores (viewer+)
+
+/scores
+  POST /?yearId=xxx&teamId=xxx         — award score to single participant (team lead+)
+  POST /bulk?yearId=xxx&teamId=xxx     — bulk award scores for a task, all-or-nothing (team lead+)
+  PATCH /:scoreEventId                 — edit base score value (admin only)
 ```
 
 ### Planned Routes
 
 ```
-/roles
-  GET   /users            — list users with global_role (admin sees viewer/user, superadmin sees viewer/user/admin)
-  PATCH /:userId/role     — promote or demote user, body: { currentRole, targetRole } (admin+)
-
-/tasks
-  POST  /                              — create task (admin+ or team lead for own team)
-  GET   /?yearId=xxx&teamId=xxx        — fetch tasks + scores (viewer+)
-
-/scores
-  POST  /                              — award score to single participant (team lead+)
-  POST  /bulk                          — award scores to multiple participants for a task (team lead+), all-or-nothing
-  PATCH /:scoreEventId                 — edit base score value (admin only)
+/leaderboard
+/audit-logs
 ```
 
 ---
@@ -428,6 +431,8 @@ const data = getValidated(c, 'json', schema);
 - `src/schemas/teams.schema.ts` — `createTeamSchema`, `getTeamsSchema`, `updateTeamNameSchema`, `updateTeamNameParamsSchema`, `teamIdsParamsSchema`
 - `src/schemas/year_participants.schema.ts` — `yearParticipantsSchema`, `yearParticipantsParamsSchema`, `getYearParticipantsQuerySchema`, `getTeamParticipantsParamsSchema`, `getYearParticipantsBanParamsSchema`, `yearParticipantsUnbanParamsSchema`, `yearParticipantsUnbanQuerySchema`
 - `src/schemas/year_access.schema.ts` — `requestYearAccessSchema`, `approveRejectYearAccessSchema`
+- `src/schemas/tasks.schema.ts` — `createTaskQuerySchema` (yearId), `createTaskBodySchema` (title, maxBaseScore, teamId?), `getTasksQuerySchema` (yearId + teamId required)
+- `src/schemas/scores.schema.ts` — `eventTypeSchema`, `scoreQuerySchema` (yearId + teamId), `awardScoreBodySchema`, `bulkScoreEntrySchema`, `bulkAwardScoreBodySchema`, `editScoreParamsSchema` (scoreEventId), `editScoreBodySchema` (value)
 
 ---
 
@@ -467,6 +472,13 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 - INVALID_ROLE_TRANSITION (400) — added for role change flow: same role or invalid transition pair
 - ROLE_CHANGE_FAILED (500) — added for role change flow: DB update of `global_role` failed
 - APP_USERS_FETCH_FAILED (500), APP_USERS_NOT_FOUND (404) — added for Auth API `listUsers` in `getAllAppUsers` util
+- TASK_NOT_FOUND (404), TASK_FETCH_FAILED (500), TASK_CREATION_FAILED (500) — added for tasks
+- SCORE_AWARD_FAILED (500), SCORE_EDIT_FAILED (500), SCORE_EVENT_NOT_FOUND (404), SCORE_FETCH_FAILED (500) — added for scores
+- SCORE_DUPLICATE_BASE (409) — participant already has a base score for this task
+- SCORE_DUPLICATE_MEDAL (409) — participant already has a medal for this task
+- MEDAL_TAKEN (409) — that medal type is already awarded to another participant in this team for this task
+- NOT_TEAM_LEAD (403) — requester is not a team lead for the specified team
+- PARTICIPANT_NOT_IN_TEAM (403) — target participant does not belong to the specified team
 - INTERNAL_SERVER_ERROR
 
 ---
@@ -511,7 +523,7 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
 - `DEFAULT_PAGE`, `DEFAULT_PAGE_SIZE` — `src/constants/common.ts`
 - `PERMANENT_BAN_DURATION = '876000h'` — `src/constants/common.ts`
 - `Table` enum — all DB table names centralised in `src/constants/common.ts`
-- `YearRoutes`, `TeamRoutes`, `TeamMembershipRoutes`, `YearAccessRoutes`, `ProfileRoutes`, `ParticipantRoutes` — `src/constants/routes.ts`
+- `YearRoutes`, `TeamRoutes`, `TeamMembershipRoutes`, `YearAccessRoutes`, `ProfileRoutes`, `ParticipantRoutes`, `RolesRoutes`, `TaskRoutes`, `ScoreRoutes` — `src/constants/routes.ts`
 
 ---
 
@@ -564,6 +576,18 @@ new AppError(message, ERROR_CODE, httpStatus, data?)
   - `admin->user`: creates approved `year_access` if not exists, then creates `year_participant` (`mobile: null`); if participant insert fails after `year_access` created, throws 500 with `data: { yearAccessCreation: true, yearParticipantCreation: false }` to surface partial state
 - `GET /roles/users` route — admin+, returns merged user list filtered by actor role
 - `PATCH /roles/:userId/role` route — admin+, `userId` from param (not body), body: `{ currentRole, targetRole }`
+- `verifyTeamLead({ userId, yearId, teamId })` utility in `src/services/tasks.service.ts` — inner-joins `year_participants → team_memberships` filtered by `team_id` and `is_team_lead = true`, returns boolean
+- `createTask` service — inserts into `tasks` with `year_id`, `title`, `max_base_score`, `team_id` (null for global tasks)
+- `getTasksWithScores` service — two-query strategy: Q1 fetches scorable participant IDs (volunteers only, `user_id IS NULL`, `is_deleted = false`) from `team_memberships → year_participants`; Q2 fetches tasks (global + team-scoped) LEFT JOIN `score_events` with no `!inner` so zero-score tasks still appear; service aggregates flat events into `{ [taskId]: { [participantId]: { base, medal, bonus_count } } }`
+- `awardScore` service — verifies participant belongs to team via `team_memberships`, checks one-base-per-participant constraint, checks one-medal-per-participant constraint, calls `assertMedalNotTaken` async helper for team-level medal uniqueness, inserts `score_event`
+- `bulkAwardScores` service — all-or-nothing: verifies all participants belong to team, fetches all existing events for task+participants upfront, validates every row for base/medal/team-medal constraints before any insert, tracks intra-batch medal collisions via a `batchMedals` Set, single bulk insert only after all validation passes
+- `editBaseScore` service — fetches event, verifies not soft-deleted, verifies `event_type === 'base'` (400 otherwise), updates value
+- `assertMedalNotTaken` private async helper — queries team's participant IDs, checks `score_events` for existing medal of same type on same task, throws `MEDAL_TAKEN` (409) if found
+- `POST /tasks?yearId=xxx` route — `requireRole(User)` + `requireYearAccess`; in-handler: admin+ unrestricted; User role must pass `verifyTeamLead` for provided `teamId`; global task (no `teamId`) requires admin+ (403 otherwise)
+- `GET /tasks?yearId=xxx&teamId=xxx` route — `requireRole(Viewer)` + `requireYearAccess`
+- `POST /scores?yearId=xxx&teamId=xxx` route — `requireRole(User)`, in-handler `verifyTeamLead` check
+- `POST /scores/bulk?yearId=xxx&teamId=xxx` route — `requireRole(User)`, in-handler `verifyTeamLead` check
+- `PATCH /scores/:scoreEventId` route — `requireRole(Admin)` only, no year access check required
 
 ### Supabase RPC Functions
 
@@ -634,8 +658,96 @@ PATCH /roles/:userId/role      — promote or demote a user (admin+)
 
 ---
 
-## 15. What's Next (in order)
+## 15. Tasks & Scoring — Built ✅
 
-1. Tasks and scoring
-2. Leaderboard
-3. Testing suite
+### Endpoints
+
+```
+POST  /tasks?yearId=xxx                    — create task (admin+ or team lead for own team)
+GET   /tasks?yearId=xxx&teamId=xxx         — fetch tasks + scores (viewer+)
+POST  /scores?yearId=xxx&teamId=xxx        — award score to single participant (team lead+)
+POST  /scores/bulk?yearId=xxx&teamId=xxx   — bulk award scores, all-or-nothing (team lead+)
+PATCH /scores/:scoreEventId               — edit base score value (admin only)
+```
+
+### POST /tasks
+
+- `yearId` as query param so `requireYearAccess` can inspect it
+- Body: `{ title, maxBaseScore, teamId? }`
+- Authorization in handler (not middleware):
+  - `teamId` provided → admin+ always allowed; User role must pass `verifyTeamLead`
+  - No `teamId` (global task) → admin+ only, User role gets 403 `NOT_TEAM_LEAD`
+
+### GET /tasks
+
+- Returns `{ tasks, scores }` — participant data served separately by `getTeamYearParticipants`
+- Two-query strategy inside service:
+  - Q1: `team_memberships → year_participants!inner` filtered by `team_id`, `year_id`, `user_id IS NULL`, `is_deleted = false` → extract `year_participant_id` list
+  - Q2: `tasks` + `score_events` (no `!inner`) filtered by `year_id`, `team_id.eq.X OR team_id.is.null`, `score_events.year_participant_id IN [Q1 ids]`, `score_events.is_deleted = false`
+  - If Q1 returns no participants, Q2 still runs (returns tasks with empty score arrays)
+
+#### Response Shape
+
+```ts
+{
+  tasks: [{ id, title, max_base_score, team_id }],
+  scores: {
+    [taskId]: {
+      [yearParticipantId]: {
+        base: number | null,
+        medal: "gold" | "silver" | "bronze" | null,
+        bonus_count: number
+      }
+    }
+  }
+}
+```
+
+### POST /scores and POST /scores/bulk
+
+- `yearId` + `teamId` as query params (used only for `verifyTeamLead` check; not stored on score events)
+- `verifyTeamLead` must return true before any service call proceeds
+
+#### Constraint enforcement order (single award)
+
+1. Participant belongs to team (`team_memberships` lookup)
+2. One base per participant per task
+3. One medal per participant per task
+4. Team-level medal uniqueness — `assertMedalNotTaken` queries team's participant IDs then checks `score_events` for same medal type on same task
+
+#### Constraint enforcement order (bulk award — all-or-nothing)
+
+1. All participants belong to team (batch membership check)
+2. Fetch all existing events for task + all team participants in one query
+3. Loop all rows upfront before any insert:
+   - Per-participant base uniqueness
+   - Per-participant medal uniqueness
+   - Team-level medal uniqueness (DB state + `batchMedals` Set for intra-batch collisions)
+4. If any row fails → throw immediately, no inserts
+
+### PATCH /scores/:scoreEventId
+
+- Admin only — no `yearId` / `teamId` context needed
+- Validates `event_type === 'base'` before updating (400 `BAD_REQUEST` if not base)
+- Validates event is not soft-deleted before updating (404 `SCORE_EVENT_NOT_FOUND`)
+
+### Files
+
+- `src/schemas/tasks.schema.ts` — `createTaskQuerySchema`, `createTaskBodySchema`, `getTasksQuerySchema`
+- `src/schemas/scores.schema.ts` — `eventTypeSchema`, `scoreQuerySchema`, `awardScoreBodySchema`, `bulkScoreEntrySchema`, `bulkAwardScoreBodySchema`, `editScoreParamsSchema`, `editScoreBodySchema`
+- `src/services/tasks.service.ts` — all service functions + `verifyTeamLead` + `assertMedalNotTaken`
+- `src/routes/tasks.routes.ts` — `POST /`, `GET /`
+- `src/routes/scores.routes.ts` — `POST /`, `POST /bulk`, `PATCH /:scoreEventId`
+
+### TypeScript Patterns
+
+- No implicit `any` — all Supabase join results cast through named interfaces (`RawTask`, `RawScoreEvent`, `RawMembership`, etc.) using `as unknown as T`
+- `isMedal(eventType: string): eventType is MedalType` type guard narrows medal strings in aggregation loop and constraint checks
+- `EventType` and `BulkScoreEntry` inferred from zod schemas via `zod.infer<>` — types stay in sync with validation
+
+---
+
+## 16. What's Next (in order)
+
+1. Leaderboard
+2. Testing suite
