@@ -230,12 +230,24 @@ Two queries — participants and tasks are independent, N+1 not viable:
 - Q2: `tasks` LEFT JOIN `score_events`, filtered by `year_id`, `team_id OR null`, `year_participant_id IN [Q1 ids]`
 - Service layer aggregates flat rows into nested score map, merged into response
 
-### 4.9 Leaderboard
+### 4.9 Leaderboard ✅ DONE
 
-- [ ] Per-team leaderboard — ranked volunteers within a team
-- [ ] Year leaderboard — compares top 2 per team across all teams
-- [ ] Excludes disqualified participants
-- [ ] Excludes team leads, admins, superadmins
+- [x] Per-team leaderboard — ranked volunteers within a team
+- [x] Year leaderboard — compares top 2 per team across all teams
+- [x] Excludes disqualified participants
+- [x] Excludes team leads, admins, superadmins
+
+### 4.10 Team Scores Config (Medal Values per Team)
+
+- [ ] Add `gold`, `silver`, `bronze`, `bonus` columns to `teams` table (integer, nullable)
+- [ ] `POST /teams/:teamId/scores-config?yearId=xxx` — set medal values (user+)
+  - All four values required, min(1)
+  - Set once only — 409 `TEAM_SCORES_CONFIG_ALREADY_SET` if already configured
+  - Verifies team belongs to year
+- [ ] `GET /teams/:teamId/scores-config?yearId=xxx` — get values / check if set (viewer+)
+  - Returns `{ pointsSet, scores: { gold, silver, bronze, bonus } | null }`
+- [ ] Scoring blocked until values set — 400 `MEDAL_VALUES_NOT_SET` in `awardScore` + `bulkAwardScores`
+- [ ] `resolveEventValue` updated to use DB values instead of hardcoded map
 
 ### 4.10 Privacy
 
@@ -327,23 +339,39 @@ Two queries — participants and tasks are independent, N+1 not viable:
 - [x] `TaskRoutes`, `ScoreRoutes` added to `src/constants/routes.ts`
 - [x] `/tasks` and `/scores` routers registered in `src/main.ts`
 
-### Phase 6 — Leaderboard
+### Phase 6 — Team Scores Config
 
-- Per-team leaderboard query
-- Year leaderboard (top 2 per team)
-- Exclusion logic (disqualified, staff roles)
+- [ ] Add `gold`, `silver`, `bronze`, `bonus` nullable integer columns to `teams` table
+- [ ] `setTeamScoresConfigBodySchema`, `setTeamScoresConfigParamsSchema`, `setTeamScoresConfigQuerySchema` in `src/schemas/teams.schema.ts`
+- [ ] `getTeamScoresConfigParamsSchema`, `getTeamScoresConfigQuerySchema` in `src/schemas/teams.schema.ts`
+- [ ] `setTeamScoresConfig` service — team/year verification, set-once enforcement (409), column update
+- [ ] `getTeamScoresConfig` service — team/year verification, returns `{ pointsSet, scores }`
+- [ ] `POST /teams/:teamId/scores-config?yearId=xxx` route — `requireRole(User)` + `requireYearAccess`
+- [ ] `GET /teams/:teamId/scores-config?yearId=xxx` route — `requireRole(Viewer)` + `requireYearAccess`
+- [ ] Update `awardScore` + `bulkAwardScores` — fetch team medal values upfront, throw 400 `MEDAL_VALUES_NOT_SET` if null
+- [ ] Update `resolveEventValue` — use DB values instead of hardcoded map
+- [ ] New error codes: `TEAM_SCORES_CONFIG_ALREADY_SET` (409), `MEDAL_VALUES_NOT_SET` (400)
 
-### Phase 7 — Notifications
+### Phase 7 — Leaderboard ✅ DONE
+
+- [x] `leaderboard` Supabase view — ghost points excluded, disqualified and staff excluded, soft-deleted score events excluded
+- [x] `resolveEventValue` — fixed medal/bonus values enforced in service layer (gold=5, silver=3, bronze=2, bonus=1); `value` optional in award schemas
+- [x] `getTeamLeaderboard` + `getYearLeaderboard` services — dense rank applied in memory
+- [x] `GET /leaderboard?yearId=xxx&teamId=xxx` route — single endpoint, `teamId` optional; `requireRole(Viewer)` + `requireYearAccess`
+- [x] `assignDenseRank` helper — tied scores share rank; year leaderboard top 2 by rank per team
+- [x] New error code: `LEADERBOARD_FETCH_FAILED` (500)
+
+### Phase 8 — Notifications
 
 - Brevo email integration
 - Access approval/rejection emails
 
-### Phase 8 — Audit Logging
+### Phase 9 — Audit Logging
 
 - Log admin actions
 - Audit log viewer endpoint
 
-### Phase 9 — Testing Suite
+### Phase 10 — Testing Suite
 
 - Bruno collection (manual)
 - Unit tests (service layer)
@@ -463,5 +491,5 @@ Two queries — participants and tasks are independent, N+1 not viable:
 
 ## 9. What's Next (Immediate)
 
-1. Leaderboard
+1. Team Scores Config (medal values per team per year)
 2. Testing suite

@@ -749,5 +749,68 @@ PATCH /scores/:scoreEventId               — edit base score value (admin only)
 
 ## 16. What's Next (in order)
 
-1. Leaderboard
+1. Team Scores Config (medal values per team per year) — see Section 17 for full spec
 2. Testing suite
+
+---
+
+## 17. Next Up — Team Scores Config
+
+Per-team, per-year medal/bonus point values. Currently `resolveEventValue` uses hardcoded values (gold=5, silver=3, bronze=2, bonus=1). This feature replaces those with configurable values stored on the `teams` table.
+
+### DB Changes
+
+- Add `gold` (integer, nullable), `silver` (integer, nullable), `bronze` (integer, nullable), `bonus` (integer, nullable) columns to `teams` table
+- All null by default — not set at team creation or copy time
+- Set once per team — enforced in service layer (not DB trigger)
+
+### Endpoints
+
+```
+POST  /teams/:teamId/scores-config?yearId=xxx  — set medal values (user+, requireYearAccess)
+GET   /teams/:teamId/scores-config?yearId=xxx  — get medal values / check if set (viewer+, requireYearAccess)
+```
+
+### POST /teams/:teamId/scores-config
+
+- Body: `{ gold, silver, bronze, bonus }` — all required integers, min(1)
+- Verify `teamId` belongs to `yearId` — if not, 404
+- If any of gold/silver/bronze/bonus already set on team → 409 `TEAM_SCORES_CONFIG_ALREADY_SET`
+- Otherwise update all four columns on `teams` row
+
+### GET /teams/:teamId/scores-config
+
+- Verify `teamId` belongs to `yearId` — if not, 404
+- Response shape:
+
+```json
+// not set
+{ "pointsSet": false, "scores": null }
+
+// set
+{ "pointsSet": true, "scores": { "gold": 100, "silver": 50, "bronze": 25, "bonus": 10 } }
+```
+
+### Scoring Enforcement (awardScore + bulkAwardScores)
+
+- At the top of both functions, after membership check, fetch team's `gold/silver/bronze/bonus` columns
+- If any are null → throw 400 `MEDAL_VALUES_NOT_SET`
+- Replace `resolveEventValue` hardcoded map with values fetched from DB
+
+### New Schemas (additions to `src/schemas/teams.schema.ts`)
+
+- `setTeamScoresConfigParamsSchema` — `teamId` (uuid)
+- `setTeamScoresConfigQuerySchema` — `yearId` (uuid)
+- `setTeamScoresConfigBodySchema` — `{ gold, silver, bronze, bonus }` all `z.number().int().min(1)`
+- `getTeamScoresConfigParamsSchema` — `teamId` (uuid)
+- `getTeamScoresConfigQuerySchema` — `yearId` (uuid)
+
+### New Service Functions
+
+- `setTeamScoresConfig` in `src/services/teams.ts`
+- `getTeamScoresConfig` in `src/services/teams.ts`
+
+### New Error Codes
+
+- `TEAM_SCORES_CONFIG_ALREADY_SET` (409) — medal values already set for this team, cannot be changed
+- `MEDAL_VALUES_NOT_SET` (400) — team has not configured medal values yet, scoring blocked

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import * as ROUTES from "@/constants/routes.ts";
+import leaderboardRouter from "@/routes/leaderboard.routes.ts";
 import profileRoutes from "@/routes/profile.routes.ts";
 import roleRoutes from "@/routes/roles.routes.ts";
 import scoresRouter from "@/routes/scores.routes.ts";
@@ -29,6 +30,8 @@ app.route(ROUTES.RolesRoutes.Base, roleRoutes);
 app.route(ROUTES.TaskRoutes.Base, tasksRouter);
 
 app.route(ROUTES.ScoreRoutes.Base, scoresRouter);
+
+app.route(ROUTES.LeaderboardRoutes.Base, leaderboardRouter);
 
 app.onError((error, c) => {
   console.log(getErrorMessage(error));

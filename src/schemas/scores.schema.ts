@@ -19,13 +19,13 @@ export const awardScoreBodySchema = zod.object({
   taskId: uuidSchema,
   yearParticipantId: uuidSchema,
   eventType: eventTypeSchema,
-  value: zod.number().int().min(0),
+  value: zod.number().int().min(0).optional(),
 });
 
 export const bulkScoreEntrySchema = zod.object({
   yearParticipantId: uuidSchema,
   eventType: eventTypeSchema,
-  value: zod.number().int().min(0),
+  value: zod.number().int().min(0).optional(),
 });
 
 export const bulkAwardScoreBodySchema = zod.object({

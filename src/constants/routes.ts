@@ -71,3 +71,8 @@ export const ScoreRoutes = {
   BulkAwardScore: "/bulk",
   EditScore: "/:scoreEventId",
 } as const;
+
+export const LeaderboardRoutes = {
+  Base: "/leaderboard",
+  GetLeaderboard: "/",
+} as const;
