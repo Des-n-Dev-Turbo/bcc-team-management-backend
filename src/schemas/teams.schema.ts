@@ -22,3 +22,18 @@ export const updateTeamNameSchema = z.object({
 export const teamIdsParamsSchema = z.object({
   teamIds: z.array(uuidSchema).min(1, "At least one team ID must be provided"),
 });
+
+export const teamScoresConfigParamsSchema = z.object({
+  teamId: uuidSchema,
+});
+
+export const teamScoresConfigQuerySchema = z.object({
+  yearId: uuidSchema,
+});
+
+export const setTeamScoresConfigBodySchema = z.object({
+  gold: z.int().min(1),
+  silver: z.int().min(1),
+  bronze: z.int().min(1),
+  bonus: z.int().min(1),
+});

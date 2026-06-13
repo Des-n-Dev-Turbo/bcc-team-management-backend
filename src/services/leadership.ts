@@ -1,10 +1,11 @@
 import { ERROR_CODES } from "@/constants/error-codes.ts";
 import { getSupabase } from "@/lib";
+import { getYearScoresStandard } from "@/services/year_scores_standard.ts";
 import { AppError } from "@/utils/error.ts";
 
 interface RawTeamLeaderboardEntry {
   participant_id: string;
-  total_score: number;
+  raw_score: number;
   year_participants: {
     name: string;
   };
@@ -13,7 +14,7 @@ interface RawTeamLeaderboardEntry {
 interface RawYearLeaderboardEntry {
   participant_id: string;
   team_id: string;
-  total_score: number;
+  normalized_score: number;
   year_participants: {
     name: string;
   };
@@ -83,13 +84,13 @@ export const getTeamLeaderboard = async ({
     .select(
       `
       participant_id,
-      total_score,
+      raw_score,
       year_participants(name)
     `,
     )
     .eq("year_id", yearId)
     .eq("team_id", teamId)
-    .order("total_score", { ascending: false });
+    .order("raw_score", { ascending: false });
 
   if (error) {
     throw new AppError(
@@ -104,7 +105,7 @@ export const getTeamLeaderboard = async ({
   const flat = typed.map((entry) => ({
     participant_id: entry.participant_id,
     name: entry.year_participants.name,
-    total_score: Number(entry.total_score),
+    total_score: Number(entry.raw_score),
   }));
 
   const ranked = assignDenseRank(flat);
@@ -122,18 +123,28 @@ export const getYearLeaderboard = async ({
 }): Promise<YearLeaderboardResponse> => {
   const db = getSupabase();
 
+  const { standardSet } = await getYearScoresStandard({ yearId });
+
+  if (!standardSet) {
+    throw new AppError(
+      "Year scoring standard has not been set",
+      ERROR_CODES.YEAR_SCORES_STANDARD_NOT_SET,
+      400,
+    );
+  }
+
   const { data, error } = await db
     .from("leaderboard")
     .select(
       `
       participant_id,
       team_id,
-      total_score,
+      normalized_score,
       year_participants(name)
     `,
     )
     .eq("year_id", yearId)
-    .order("total_score", { ascending: false });
+    .order("normalized_score", { ascending: false });
 
   if (error) {
     throw new AppError(
@@ -175,7 +186,7 @@ export const getYearLeaderboard = async ({
     list.push({
       participant_id: entry.participant_id,
       name: entry.year_participants.name,
-      total_score: Number(entry.total_score),
+      total_score: Number(entry.normalized_score),
     });
     teamMap.set(entry.team_id, list);
   }

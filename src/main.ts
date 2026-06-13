@@ -7,6 +7,7 @@ import roleRoutes from "@/routes/roles.routes.ts";
 import scoresRouter from "@/routes/scores.routes.ts";
 import tasksRouter from "@/routes/tasks.routes.ts";
 import teamMembershipsRouter from "@/routes/team_memberships.routes.ts";
+import teamScoresConfigRouter from "@/routes/team_scores_config.routes.ts";
 import teamRoutes from "@/routes/teams.routes.ts";
 import yearAccessRouter from "@/routes/year_access.routes.ts";
 import yearRoutes from "@/routes/years.routes.ts";
@@ -32,6 +33,8 @@ app.route(ROUTES.TaskRoutes.Base, tasksRouter);
 app.route(ROUTES.ScoreRoutes.Base, scoresRouter);
 
 app.route(ROUTES.LeaderboardRoutes.Base, leaderboardRouter);
+
+app.route(ROUTES.TeamScoresConfigRoutes.Base, teamScoresConfigRouter);
 
 app.onError((error, c) => {
   console.log(getErrorMessage(error));

@@ -202,7 +202,8 @@ If no active year → skip dependent side effects, proceed with role change only
 - Medal uniqueness is team-scoped — Team A's medals for T1 independent of Team B's
 - Bonus rows are unlimited
 - Score event types: `base | gold | silver | bronze | bonus`
-- Score values: gold +5, silver +3, bronze +2, bonus +1, base 0–N
+- Score values: `base` 0–N (caller-supplied); `gold`/`silver`/`bronze`/`bonus` resolved from that team's Team Scores Config (see 4.10) — no longer fixed constants
+- Scoring is blocked (400 `MEDAL_VALUES_NOT_SET`) until a team's medal values are configured
 
 #### GET /tasks Response Shape
 
@@ -237,17 +238,29 @@ Two queries — participants and tasks are independent, N+1 not viable:
 - [x] Excludes disqualified participants
 - [x] Excludes team leads, admins, superadmins
 
-### 4.10 Team Scores Config (Medal Values per Team)
+### 4.10 Team Scores Config + Year Scoring Standard
 
-- [ ] Add `gold`, `silver`, `bronze`, `bonus` columns to `teams` table (integer, nullable)
-- [ ] `POST /teams/:teamId/scores-config?yearId=xxx` — set medal values (user+)
+**Team Scores Config (per team per year)** ✅ DONE
+- [x] `gold`, `silver`, `bronze`, `bonus` columns on `teams` table (integer, nullable) — no migration framework; columns added directly (dev stage, no data)
+- [x] `POST /teams/:teamId/scores-config?yearId=xxx` — set medal values (user+)
   - All four values required, min(1)
   - Set once only — 409 `TEAM_SCORES_CONFIG_ALREADY_SET` if already configured
-  - Verifies team belongs to year
-- [ ] `GET /teams/:teamId/scores-config?yearId=xxx` — get values / check if set (viewer+)
+  - Verifies team belongs to year; blocks if year is locked
+- [x] `GET /teams/:teamId/scores-config?yearId=xxx` — get values / check if set (viewer+, requireYearAccess)
   - Returns `{ pointsSet, scores: { gold, silver, bronze, bonus } | null }`
-- [ ] Scoring blocked until values set — 400 `MEDAL_VALUES_NOT_SET` in `awardScore` + `bulkAwardScores`
-- [ ] `resolveEventValue` updated to use DB values instead of hardcoded map
+- [x] Scoring blocked until values set — 400 `MEDAL_VALUES_NOT_SET` in `awardScore` + `bulkAwardScores`
+- [x] `resolveEventValue` updated — takes `medalValues` (from `getTeamScoresConfig`) instead of hardcoded map; `awardScore`/`bulkAwardScores` fetch team config upfront and pass `yearId` through
+
+**Year Scoring Standard (global normalization)** ✅ DONE
+- [x] `gold`, `silver`, `bronze`, `bonus` columns on `years` table (integer, nullable) — no migration framework; columns added directly (dev stage, no data)
+- [x] `POST /years/:yearId/scores-standard` — set global standard (admin+)
+  - Set once only — 409 `YEAR_SCORES_STANDARD_ALREADY_SET` if already configured; blocked if year is locked
+- [x] `GET /years/:yearId/scores-standard` — get standard / check if set (viewer+, requireYearAccess)
+  - Returns `{ standardSet, scores: { gold, silver, bronze, bonus } | null }`
+- [x] Updated `leaderboard` Supabase view — adds `raw_score` (sum of all `score_events.value`, used by team leaderboard) and `normalized_score` (medal counts × year standard values + base scores, used by year leaderboard); view recreated directly (dev stage, no migration)
+- [x] `getYearLeaderboard` updated — checks `getYearScoresStandard`, throws 400 `YEAR_SCORES_STANDARD_NOT_SET` if `standardSet` is false, then queries/orders by `normalized_score`
+- [x] `getTeamLeaderboard` updated — queries/orders by `raw_score` instead of `total_score`
+- [x] API response shape unchanged — both leaderboard types still return `total_score` per participant (now sourced from `raw_score` or `normalized_score` depending on context)
 
 ### 4.10 Privacy
 
@@ -339,23 +352,39 @@ Two queries — participants and tasks are independent, N+1 not viable:
 - [x] `TaskRoutes`, `ScoreRoutes` added to `src/constants/routes.ts`
 - [x] `/tasks` and `/scores` routers registered in `src/main.ts`
 
-### Phase 6 — Team Scores Config
+### Phase 6 — Team Scores Config + Year Scoring Standard ✅ DONE
 
-- [ ] Add `gold`, `silver`, `bronze`, `bonus` nullable integer columns to `teams` table
-- [ ] `setTeamScoresConfigBodySchema`, `setTeamScoresConfigParamsSchema`, `setTeamScoresConfigQuerySchema` in `src/schemas/teams.schema.ts`
-- [ ] `getTeamScoresConfigParamsSchema`, `getTeamScoresConfigQuerySchema` in `src/schemas/teams.schema.ts`
-- [ ] `setTeamScoresConfig` service — team/year verification, set-once enforcement (409), column update
-- [ ] `getTeamScoresConfig` service — team/year verification, returns `{ pointsSet, scores }`
-- [ ] `POST /teams/:teamId/scores-config?yearId=xxx` route — `requireRole(User)` + `requireYearAccess`
-- [ ] `GET /teams/:teamId/scores-config?yearId=xxx` route — `requireRole(Viewer)` + `requireYearAccess`
-- [ ] Update `awardScore` + `bulkAwardScores` — fetch team medal values upfront, throw 400 `MEDAL_VALUES_NOT_SET` if null
-- [ ] Update `resolveEventValue` — use DB values instead of hardcoded map
-- [ ] New error codes: `TEAM_SCORES_CONFIG_ALREADY_SET` (409), `MEDAL_VALUES_NOT_SET` (400)
+**Team Scores Config** ✅ DONE
+- [x] `gold`, `silver`, `bronze`, `bonus` nullable integer columns on `teams` table (added directly — dev stage, no migration)
+- [x] `teamScoresConfigParamsSchema`, `teamScoresConfigQuerySchema`, `setTeamScoresConfigBodySchema` in `src/schemas/teams.schema.ts`
+- [x] `setTeamScoresConfig` service (`src/services/team_scores_config.ts`) — verifies team belongs to year, blocks if year locked, set-once enforcement (409), column update
+- [x] `getTeamScoresConfig` service — verifies team belongs to year, returns `{ pointsSet, scores }`
+- [x] `POST /teams/:teamId/scores-config?yearId=xxx` route — `requireRole(User)` + `requireYearAccess`
+- [x] `GET /teams/:teamId/scores-config?yearId=xxx` route — `requireRole(Viewer)` + `requireYearAccess`
+- [x] Updated `awardScore` + `bulkAwardScores` (now require `yearId` param) — fetch team medal values upfront via `getTeamScoresConfig`, throw 400 `MEDAL_VALUES_NOT_SET` if not configured
+- [x] Updated `resolveEventValue` — now takes `medalValues: MedalValues` param, uses DB values instead of hardcoded `FIXED_EVENT_VALUES` map
+- [x] `awardScore`'s `value` field changed to optional (`value?: number`) to match `awardScoreBodySchema` and `resolveEventValue`'s signature
+- [x] `scores.routes.ts` updated — passes `yearId` through to `awardScore` and `bulkAwardScores`
+- [x] New error codes: `TEAM_SCORES_CONFIG_ALREADY_SET` (409), `TEAM_SCORES_CONFIG_FETCH_FAILED` (500), `TEAM_SCORES_CONFIG_SET_FAILED` (500), `MEDAL_VALUES_NOT_SET` (400)
+- [x] `TeamScoresConfigRoutes` added to `src/constants/routes.ts`; router registered in `src/main.ts`
+
+**Year Scoring Standard** ✅ DONE
+- [x] `gold`, `silver`, `bronze`, `bonus` nullable integer columns on `years` table (added directly — dev stage, no migration)
+- [x] `yearScoresStandardParamsSchema`, `setYearScoresStandardBodySchema` in `src/schemas/years.schema.ts`
+- [x] `setYearScoresStandard` service (`src/services/year_scores_standard.ts`) — admin-only, blocks if year locked, set-once enforcement (409), column update
+- [x] `getYearScoresStandard` service — returns `{ standardSet, scores }`
+- [x] `POST /:yearId/scores-standard` route (in `years.routes.ts`) — `requireRole(Admin)`
+- [x] `GET /:yearId/scores-standard` route — `requireRole(Viewer)` + `requireYearAccess`
+- [x] New error codes: `YEAR_SCORES_STANDARD_ALREADY_SET` (409), `YEAR_SCORES_STANDARD_FETCH_FAILED` (500), `YEAR_SCORES_STANDARD_SET_FAILED` (500), `YEAR_SCORES_STANDARD_NOT_SET` (400)
+- [x] `YearScoresStandardRoutes` added to `src/constants/routes.ts`
+- [x] `leaderboard` Supabase view recreated — `INNER JOIN years` for `MAX(y.gold/silver/bronze/bonus)`, adds `raw_score` (sum of `score_events.value`) and `normalized_score` (medal-count × year-standard + base scores); view recreated directly (dev stage, no migration)
+- [x] `getYearLeaderboard` (`src/services/leadership.ts`) — calls `getYearScoresStandard`, throws 400 `YEAR_SCORES_STANDARD_NOT_SET` if `standardSet` is false, queries/orders by `normalized_score`
+- [x] `getTeamLeaderboard` — queries/orders by `raw_score` instead of `total_score`; API response field name (`total_score`) unchanged for frontend compatibility
 
 ### Phase 7 — Leaderboard ✅ DONE
 
 - [x] `leaderboard` Supabase view — ghost points excluded, disqualified and staff excluded, soft-deleted score events excluded
-- [x] `resolveEventValue` — fixed medal/bonus values enforced in service layer (gold=5, silver=3, bronze=2, bonus=1); `value` optional in award schemas
+- [x] `resolveEventValue` — at the time of this phase, fixed medal/bonus values were enforced in service layer (gold=5, silver=3, bronze=2, bonus=1); `value` optional in award schemas. **Superseded by Phase 6** — values now resolved per-team from Team Scores Config
 - [x] `getTeamLeaderboard` + `getYearLeaderboard` services — dense rank applied in memory
 - [x] `GET /leaderboard?yearId=xxx&teamId=xxx` route — single endpoint, `teamId` optional; `requireRole(Viewer)` + `requireYearAccess`
 - [x] `assignDenseRank` helper — tied scores share rank; year leaderboard top 2 by rank per team
@@ -413,6 +442,11 @@ Two queries — participants and tasks are independent, N+1 not viable:
 | Roles — currentRole verification        | Fetch actual `global_role` from DB, compare to `currentRole` in body; 409 `ROLE_OUT_OF_SYNC` on mismatch | Frontend state may be stale; side effects must execute against verified state, not caller assumptions |
 | Roles — no active year                 | Skip dependent side effects, proceed with role change only                | Role is global; active year is contextual — missing year should not block role change       |
 | Team lead promotion error code         | `TEAM_LEAD_ALREADY_EXISTS` (chosen over `TEAM_LEAD_EXISTS`)               | More descriptive; frontend not yet built so no contract to break                                                                |
+| Medal/bonus values                     | Per-team configurable via Team Scores Config, set once (409 if reconfigured) | Different teams may want different point structures; immutability avoids retroactive score drift                              |
+| Scoring gate                           | 400 `MEDAL_VALUES_NOT_SET` until team config is set                       | Prevents scores being recorded with undefined point values                                                                     |
+| Year scoring standard                  | Single global set-once standard per year (admin-only), separate from per-team config | Provides a normalization baseline for cross-team year leaderboard (raw vs normalized score)                                    |
+| DB schema changes (Phase 6)            | Columns added directly to `teams`/`years`, no migration files             | Project in dev stage, no production data yet — migration framework deferred                                                    |
+| Leaderboard normalization               | `leaderboard` view computes both `raw_score` and `normalized_score`; team leaderboard uses `raw_score`, year leaderboard uses `normalized_score`; API still returns `total_score` field for both | Single view serves both leaderboard types without duplication; no frontend contract change needed |
 
 ---
 
@@ -437,12 +471,16 @@ Two queries — participants and tasks are independent, N+1 not viable:
   PATCH /:yearId/participants/:id/unban
   PATCH /:yearId/participants/:id/disqualify
   PATCH /:yearId/participants/:id/undisqualify
+  POST  /:yearId/scores-standard            — set year scoring standard, set-once (admin+)
+  GET   /:yearId/scores-standard            — get year scoring standard / check if set (viewer+)
 
 /teams
   POST  /create                             — create team (admin+)
   GET   /                                   — list teams for year
   PATCH /:teamId                            — update team name (admin+)
   POST  /year/:yearId/copy                  — copy teams from previous year (admin+)
+  POST  /:teamId/scores-config?yearId=xxx   — set team medal values, set-once (user+)
+  GET   /:teamId/scores-config?yearId=xxx   — get team medal values / check if set (viewer+)
 
 /team-memberships
   POST  /?yearId=xxx                        — assign participant to team (user+)
@@ -468,11 +506,13 @@ Two queries — participants and tasks are independent, N+1 not viable:
   GET   /?yearId=xxx&teamId=xxx             — fetch tasks + scores (viewer+)
 
 /scores
-  POST  /?yearId=xxx&teamId=xxx             — award score to single participant (team lead+)
-  POST  /bulk?yearId=xxx&teamId=xxx         — award scores to multiple participants for a task (team lead+), all-or-nothing
+  POST  /?yearId=xxx&teamId=xxx             — award score to single participant (team lead+); 400 MEDAL_VALUES_NOT_SET if team scores config not set
+  POST  /bulk?yearId=xxx&teamId=xxx         — award scores to multiple participants for a task (team lead+), all-or-nothing; same gating
   PATCH /:scoreEventId                      — edit base score value (admin only)
 
-/leaderboard                                — PLANNED
+/leaderboard
+  GET   /?yearId=xxx&teamId=xxx             — team or year leaderboard, teamId optional (viewer+); team leaderboard ranks by raw_score, year leaderboard ranks by normalized_score and returns 400 YEAR_SCORES_STANDARD_NOT_SET if year standard not configured
+
 /audit-logs                                 — PLANNED
 ```
 
@@ -491,5 +531,6 @@ Two queries — participants and tasks are independent, N+1 not viable:
 
 ## 9. What's Next (Immediate)
 
-1. Team Scores Config (medal values per team per year)
-2. Testing suite
+1. Phase 8 — Notifications (Brevo email integration)
+2. Phase 9 — Audit Logging
+3. Phase 10 — Testing Suite

@@ -7,6 +7,7 @@ import type {
   bulkAwardScoreBodySchema,
   eventTypeSchema,
 } from "@/schemas/scores.schema.ts";
+import { getTeamScoresConfig } from "@/services/team_scores_config.ts";
 import { AppError } from "@/utils/error.ts";
 
 interface RawScoreEvent {
@@ -76,14 +77,18 @@ export interface TasksResponse {
   scores: Record<string, Record<string, ScoreAggregate>>;
 }
 
-const FIXED_EVENT_VALUES = {
-  gold: 5,
-  silver: 3,
-  bronze: 2,
-  bonus: 1,
-} as const;
+interface MedalValues {
+  gold: number;
+  silver: number;
+  bronze: number;
+  bonus: number;
+}
 
-function resolveEventValue(eventType: EventType, callerValue?: number): number {
+function resolveEventValue(
+  eventType: EventType,
+  medalValues: MedalValues,
+  callerValue?: number,
+): number {
   if (eventType === "base") {
     if (callerValue === undefined) {
       throw new AppError(
@@ -94,7 +99,7 @@ function resolveEventValue(eventType: EventType, callerValue?: number): number {
     }
     return callerValue;
   }
-  return FIXED_EVENT_VALUES[eventType];
+  return medalValues[eventType];
 }
 
 function isMedal(eventType: string): eventType is MedalType {
@@ -287,15 +292,30 @@ export const awardScore = async ({
   value,
   createdBy,
   teamId,
+  yearId,
 }: {
   taskId: string;
   yearParticipantId: string;
   eventType: EventType;
-  value: number;
   createdBy: string;
   teamId: string;
+  yearId: string;
+  value?: number;
 }) => {
   const db = getSupabase();
+
+  const { pointsSet, scores: teamMedalValues } = await getTeamScoresConfig({
+    teamId,
+    yearId,
+  });
+
+  if (!pointsSet || !teamMedalValues) {
+    throw new AppError(
+      "Medal values have not been set for this team",
+      ERROR_CODES.MEDAL_VALUES_NOT_SET,
+      400,
+    );
+  }
 
   const { data: membershipData, error: membershipError } = await db
     .from(Table.TeamMemberships)
@@ -362,7 +382,7 @@ export const awardScore = async ({
     await assertMedalNotTaken({ db, taskId, teamId, medalType: eventType });
   }
 
-  const resolvedValue = resolveEventValue(eventType, value);
+  const resolvedValue = resolveEventValue(eventType, teamMedalValues, value);
 
   const { data: insertedEvent, error: insertError } = await db
     .from(Table.ScoreEvents)
@@ -393,13 +413,28 @@ export const bulkAwardScores = async ({
   scores,
   createdBy,
   teamId,
+  yearId,
 }: {
   taskId: string;
   scores: BulkScoreEntry[];
   createdBy: string;
   teamId: string;
+  yearId: string;
 }) => {
   const db = getSupabase();
+
+  const { pointsSet, scores: teamMedalValues } = await getTeamScoresConfig({
+    teamId,
+    yearId,
+  });
+
+  if (!pointsSet || !teamMedalValues) {
+    throw new AppError(
+      "Medal values have not been set for this team",
+      ERROR_CODES.MEDAL_VALUES_NOT_SET,
+      400,
+    );
+  }
 
   const participantIds = [...new Set(scores.map((s) => s.yearParticipantId))];
 
@@ -506,7 +541,7 @@ export const bulkAwardScores = async ({
     task_id: taskId,
     year_participant_id: s.yearParticipantId,
     event_type: s.eventType,
-    value: resolveEventValue(s.eventType, s.value),
+    value: resolveEventValue(s.eventType, teamMedalValues, s.value),
     created_by: createdBy,
     is_deleted: false,
   }));

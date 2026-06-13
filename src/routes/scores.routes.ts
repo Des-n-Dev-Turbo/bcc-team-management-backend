@@ -56,6 +56,7 @@ scoresRouter.post(
       value,
       createdBy: userId,
       teamId,
+      yearId,
     });
 
     return c.json(result, 201);
@@ -94,6 +95,7 @@ scoresRouter.post(
       scores,
       createdBy: userId,
       teamId,
+      yearId,
     });
 
     return c.json(result, 201);

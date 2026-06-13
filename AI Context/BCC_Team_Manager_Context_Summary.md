@@ -1,692 +1,213 @@
-# BCC Team Manager — AI Agent Context Summary
+# BCC Team Manager — Product & Implementation Plan
 
-## 1. Project Overview
+## 1. What Is This App?
 
-BCC Team Manager is a backend system for managing Bengaluru Comic Con volunteer coordination.
+BCC Team Manager is a backend system built for **Bengaluru Comic Con** to coordinate
+volunteers across yearly events. Each year BCC runs an event with 10–20 volunteer
+teams. The system manages who participates, which team they belong to, how they
+are scored, and who can see what data.
 
-- **Client:** Bengaluru Comic Con
-- **Purpose:** Manage yearly volunteer events — teams, participants, scoring, leaderboard
-- **Constraint:** Must run entirely on free-tier infrastructure
-- **Deployment Target:** Deno Deploy (serverless) or Fly.io
-
----
-
-## 2. Tech Stack
-
-### Backend
-
-- **Runtime:** Deno
-- **Framework:** Hono (REST API)
-- **Language:** TypeScript
-- **Database:** Supabase (PostgreSQL)
-- **Auth:** Supabase Auth (Google OAuth + email/password for testing)
-- **JWT:** ES256 via JWKS (`jose` library)
-- **Email:** Brevo HTTP API
-- **Validation:** Zod v4 (`@zod/zod` from JSR)
-
-### Frontend (separate project)
-
-- React, TanStack Router, TanStack Query, React Hook Form + Zod, Tailwind CSS, Base UI, TypeScript, Vite
+The system is API-first. A React frontend consumes it. All infrastructure runs
+on free-tier services.
 
 ---
 
-## 3. Database Schema
+## 2. Core Concepts
 
-### `years`
-
-- id (uuid, pk)
-- name (text, unique)
-- year (int)
-- is_locked (boolean)
-- created_at
-
-### `teams`
-
-- id (uuid, pk)
-- name (text)
-- year_id (uuid, fk → years.id)
-- created_at
-- UNIQUE (year_id, name)
-
-### `profiles`
-
-- id (uuid, pk, fk → auth.users.id)
-- global_role (viewer | user | admin | superadmin)
-- previous_role (text, nullable, CHECK same enum as global_role) — stores prior role before ban demotion
-- name (text, nullable)
-- email (text, nullable)
-- created_at
-
-### `year_participants`
-
-- id (uuid, pk)
-- year_id (uuid, fk → years.id)
-- user_id (uuid, nullable, fk → auth.users.id)
-- name (text)
-- email (text)
-- mobile (text)
-- reg_id (text, nullable)
-- banned (boolean)
-- disqualified (boolean)
-- created_at
-- UNIQUE (year_id, email)
-
-### `team_memberships`
-
-- id (uuid, pk)
-- team_id (uuid, fk → teams.id)
-- year_participant_id (uuid, fk → year_participants.id)
-- is_team_lead (boolean)
-- UNIQUE (year_participant_id)
-- UNIQUE (team_id) WHERE is_team_lead = true
-
-### `tasks`
-
-- id (uuid, pk)
-- title (text)
-- year_id (uuid, nullable)
-- team_id (uuid, nullable)
-- max_base_score (int)
-- created_at
-
-### `score_events`
-
-- id (uuid, pk)
-- task_id (uuid, fk → tasks.id)
-- year_participant_id (uuid, fk → year_participants.id)
-- event_type (base | gold | silver | bronze | bonus)
-- value (int)
-- created_by (uuid, fk → auth.users.id)
-- is_deleted (boolean, default false) ← soft delete, set to true when participant is banned
-- created_at
-
-### `audit_logs`
-
-- id (uuid, pk)
-- actor_id (uuid)
-- action (text)
-- entity_type (text)
-- entity_id (uuid)
-- before (jsonb)
-- after (jsonb)
-- created_at
-
-### `year_access`
-
-- id (uuid, pk)
-- user_id (uuid, fk → auth.users.id)
-- year_id (uuid, fk → years.id)
-- status (text: pending | approved | rejected)
-- created_at
-- UNIQUE INDEX on (user_id, year_id) WHERE status != 'rejected'
+| Concept         | Description                                                |
+| --------------- | ---------------------------------------------------------- |
+| **Year**        | One BCC event. All data is scoped to a year.               |
+| **Team**        | A volunteer squad within a year. 10–20 teams per year.     |
+| **Participant** | A volunteer registered for a year. Most don't use the app. |
+| **Team Lead**   | A participant who manages a team. Has app access.          |
+| **Year Access** | Controls which users can see which year's data.            |
+| **Scoring**     | Points awarded per task. Drives leaderboard.               |
+| **Leaderboard** | Ranks volunteers per team and across the year.             |
 
 ---
 
-## 4. RBAC System
+## 3. User Roles
 
-### Roles (stored in profiles.global_role)
-
-- **viewer** — read-only, masked data, needs year_access approval
-- **user** — team lead, can score/manage own team participants
-- **admin** — full control within a year
-- **superadmin** — full system-wide control
+| Role           | Description                                               |
+| -------------- | --------------------------------------------------------- |
+| **viewer**     | Authenticated user, approved for a year, sees masked data |
+| **user**       | Team lead. Manages own team. Scores participants.         |
+| **admin**      | Full control within a year. Approves access requests.     |
+| **superadmin** | Full system-wide control. Creates years.                  |
 
 ### Role Hierarchy
 
+```
 viewer < user < admin < superadmin
-
-### Middleware Chain (in order)
-
-1. `supabaseAuth` — verifies JWT, sets userId, email, name on context
-2. `loadProfile` — fetches profile from DB, sets global_role on context
-3. `requireRole(minRole)` — enforces minimum role
-4. `requireYearAccess` — checks year_access table for viewer/user roles (admin+ bypass)
-   - Reads `yearId` from query param OR URL param: `c.req.query('yearId') ?? c.req.param('yearId') ?? null`
+```
 
 ---
 
-## 5. Key Business Rules
+## 4. Full Feature List
 
-### Years
+### 4.1 Authentication & Profiles
 
-- Immutable after is_locked = true
-- Only superadmin can create years
-- Admin can lock years
-- Only one active (unlocked) year allowed at a time — creating a new year is blocked if any existing year is unlocked (409 error)
+- [x] Google OAuth login
+- [x] Email/password login (for testing)
+- [x] JWT verification via JWKS (ES256)
+- [x] Profile auto-creation on first login (bootstrap)
+- [x] Profile stores name, email, global_role
+- [ ] Profile update endpoint (PATCH /profile)
 
-### Teams
+### 4.2 Year Management
 
-- Unique per year
-- No deletion allowed
-- Only admin+ can create/update teams
+- [x] Create year (superadmin only)
+- [x] Lock year — makes it immutable (admin+)
+- [x] Get all years with per-user access status
+- [x] Year creation guard — block if any existing year is unlocked (409, returns unlocked_years list, checks is_locked = false OR null)
+- [ ] Get single year details
 
-### Participants (year_participants)
+### 4.3 Year Access Control
 
-- Scoped per year, identified by (year_id + email)
-- user_id is nullable — most volunteers don't have app accounts
-- banned = permanent across all years (enforced at registration)
-- disqualified = scoped to current year only, affects leaderboard
-- Volunteers only (user_id = null) appear on leaderboard
-- Team leads, admins, superadmins are also year_participants but excluded from leaderboard
+- [x] User requests access to a year
+- [x] Admin views all requests (grouped: pending, approved, rejected)
+- [x] Admin approves request (grants viewer access)
+- [x] Admin rejects request
+- [x] Max 3 requests per user per year
+- [x] Remove year access (admin+) — `DELETE /year-access/:userId/remove?yearId=xxx`, rejects year_access + cascade cleanup for team leads
+- [x] List all approved year access users — `GET /year-access/users?yearId=xxx` (admin+, excludes banned, merges Auth API + profiles)
+- [ ] Notify user via email on approve/reject (Brevo)
 
-### Participant Listing
+### 4.3a Role Promotion & Demotion (`/roles` dashboard) ✅ DONE
 
-- Two separate endpoints — year view (paginated) and team view (non-paginated)
-- Year view: `GET /years/:yearId/participants` — 50 per page, default sort: name asc, volunteers only (`.is('user_id', null)`)
-- Team view: `GET /years/:yearId/teams/:teamId/participants` — all records, sorted by name, volunteers only (`.is('user_id', null)`)
-- Both accessible by any authenticated user with approved year_access
-- Shared utility functions in `src/utils/participants.ts`:
-  - `getRequesterTeam({ userId, yearId, role, requestedTeamId })` — finds requester's team (`actualTeamId`) and restricts `canSeePII` only to their strictly requested team if provided
-  - `applyPrivacyMask(participant, canSeePII)` — redacts email/mobile, flattens team_memberships join
+- [x] `GET /roles/users` — list users with global_role (admin+)
+  - Parallel: Auth Admin API `listUsers` (via `getAllAppUsers`) + `profiles` `.in("global_role", [viewer, user, admin])`
+  - Merged in memory via Map; filtered by actor role
+  - Admin sees: viewer, user only
+  - Superadmin sees: viewer, user, admin (superadmin excluded from management)
+- [x] `PATCH /roles/:userId/role` — single endpoint, `userId` from URL param, body: `{ currentRole, targetRole }` (admin+)
+  - Fetches target user's actual `global_role` from `profiles` — verifies it matches `currentRole` from body
+  - If mismatch → 409 `ROLE_OUT_OF_SYNC` (frontend state is stale)
+  - Admin: viewer ↔ user only. Attempt to go beyond → 403
+  - Superadmin: viewer ↔ user, viewer ↔ admin, user ↔ admin
+  - Same role → 400 `INVALID_ROLE_TRANSITION`. Invalid pair → 400 `INVALID_ROLE_TRANSITION`
 
-### Participant Listing — Banned and Disqualified Rules
+#### Side Effects Per Transition (implemented)
 
-- **Banned participants** — excluded from both year view and team view entirely
-  - Separate admin-only page (within year) for viewing and managing banned participants
-- **Disqualified participants** — included in both views (visible in general list)
-  - Separate admin-only page (within year) for viewing and managing disqualified participants
-  - Admin can undisqualify a participant via that page
+| Transition     | Side Effects |
+| -------------- | ------------ |
+| viewer → user  | Create `year_participant` (`mobile: null`, ignores 23505) — only if active year exists AND viewer has approved `year_access` |
+| user → viewer  | Delete `team_membership` (if exists) + delete `year_participant` for active year |
+| viewer → admin | Delete `year_access` for active year (if exists) |
+| admin → viewer | Create approved `year_access` for active year (if exists and not already approved) |
+| user → admin   | Delete `team_membership` (if exists) + delete `year_participant` for active year |
+| admin → user   | Create approved `year_access` (if not exists) + create `year_participant` (`mobile: null`); partial failure surfaced via `data: { yearAccessCreation: true, yearParticipantCreation: false }` |
 
-### Participant Listing — Filtering and Sorting (Year View)
+**Active year:** `years` where `is_locked IS NULL OR is_locked = false`, order `created_at DESC`, limit 1.
+If no active year → skip dependent side effects, proceed with role change only.
 
-- Sorting and filtering must happen at DB level (pagination makes client-side filtering incorrect)
-- Team view has no pagination — sorting and filtering handled client-side by TanStack Table, no API changes needed
+### 4.4 Team Management
 
-#### Query Params for Year View (`GET /years/:yearId/participants`)
+- [x] Create team for a year (admin+)
+- [x] Get all teams for a year (any authenticated user)
+- [x] Update team name (admin+)
+- [x] Copy teams from previous year to new year — `POST /teams/year/:yearId/copy`, body: `{ teamIds }`, skips duplicates by name, returns `{ created, skipped }`
+- [ ] Get single team details
+- [ ] Delete team (superadmin only — soft delete)
 
-| Param  | Type              | Allowed For | Default | Notes                                                 |
-| ------ | ----------------- | ----------- | ------- | ----------------------------------------------------- |
-| page   | number            | All         | 1       | 50 records per page                                   |
-| sort   | `name` \| `email` | See below   | `name`  | `email` sort silently ignored for viewer/user         |
-| order  | `asc` \| `desc`   | All         | `asc`   |                                                       |
-| name   | string            | All         | —       | Contains search, case-insensitive (`ilike '%value%'`) |
-| email  | string            | Admin+ only | —       | Contains search, silently ignored for viewer/user     |
-| mobile | string            | Admin+ only | —       | Contains search, silently ignored for viewer/user     |
+### 4.5 Participant Management
 
-#### Filter Strategy
+- [x] Add single participant to a year (admin+)
+- [x] Bulk add participants via CSV (admin+)
+- [x] Get all volunteers for a year — paginated, 50/page, default sort name asc, with filtering and sorting (any with year access)
+- [x] Get all volunteers for a specific team — limit 50, sorted by name, privacy masked (any with year access)
+  - Scores excluded — served via separate endpoint when scoring is built (Option B decision)
+- [x] Privacy masking — email/mobile redacted based on role and team assignment
+- [x] Shared utility functions — `getRequesterTeam`, `applyPrivacyMask`
+- [ ] Get single participant details
+- [x] Ban participant (admin+) — excluded from all volunteer listings
+  - Regular volunteer: `banned=true`, delete team_membership, soft delete score_events (`is_deleted=true`)
+  - Team lead: disable Supabase account first (`ban_duration: '876000h'`), then RPC: `banned=true`, save `previous_role`, demote to viewer, delete team_membership, delete current year year_access only
+  - Historical year_access records for other years preserved
+  - Admin/superadmin not bannable — throws 403
+- [x] Unban participant (admin+) — two modes via `restoreAuth` query param
+  - Basic pardon — lifts ban, restores scores, re-enables Supabase account. No role/access restoration.
+  - Full reinstatement (`restoreAuth=true`) — additionally restores `global_role` from `previous_role`, creates year_access
+  - Partial success (207) when auth restored but DB fails
+  - `restore_team_lead_access` RPC handles reinstatement atomically
+- [x] Disqualify participant (admin+) — visible in listings, excluded from leaderboard, team lead guard, unlocked year only
+- [x] Undisqualify participant (admin+) — sets disqualified=false, unlocked year only
+- [x] Update participant details (admin+) — `PATCH /:yearId/participants/:id`, partial update of name/email/mobile, email uniqueness enforced (409 `PARTICIPANT_EMAIL_CONFLICT` with conflicting name), year lock check, unlocked years only
+- [x] `GET /years/:yearId/team-leads` — staff dashboard (admin+)
+  - Shows year_participants where user_id IS NOT NULL (includes banned)
+  - Left join team_memberships — unassigned team leads show with null team
+  - Full PII visible, no pagination (max 25–30 team leads per year)
+
+#### Participant Listing — Filtering and Sorting Design (Locked)
+
+**Year view** — DB-level filtering and sorting required (pagination makes client-side incorrect)
+
+| Param  | Allowed For                   | Default | Behaviour                                        |
+| ------ | ----------------------------- | ------- | ------------------------------------------------ |
+| page   | All                           | 1       | 50 per page                                      |
+| sort   | `name`: All / `email`: admin+ | `name`  | `email` sort silently ignored for viewer/user    |
+| order  | All                           | `asc`   | asc or desc                                      |
+| name   | All                           | —       | ilike contains (`%value%`), case-insensitive     |
+| email  | Admin+ only                   | —       | ilike contains, silently ignored for viewer/user |
+| mobile | Admin+ only                   | —       | ilike contains, silently ignored for viewer/user |
 
 - Filter method: `.ilike('field', '%value%')` — contains, case-insensitive — for all filter fields
-- Role enforcement for restricted params is done in the **service layer** — restricted params are silently ignored based on role, not rejected with 403
-- The API enforces param restrictions independently of the frontend
-- **Only one filter applies at a time (intentional)** — priority order: `email` → `mobile` → `name` for admin+; `name` only for viewer/user. If multiple params are sent, lower-priority ones are silently ignored. This is a deliberate product decision, not a bug.
+- Restricted params silently ignored for viewer/user — not rejected with 403
+- Banned participants excluded from results in both views
+- Disqualified participants included in results in both views
 
-### Banning Logic
+**Team view** — no pagination, sorting and filtering handled client-side by TanStack Table.
 
-- Check most recent record for email on registration
-- If banned = true → block registration, return banned participant details
-- Only admin+ can ban or unban
+### 4.6 Team Memberships
 
-#### Ban Flow — Regular Volunteer (`user_id = null`)
+- [x] Assign participant to team — admin+ (any team) or team lead (own team only, unassigned participants only)
+  - `POST /team-memberships?yearId=xxx`, body: `{ teamId, participantId }`, handles 23505 with 409
+- [x] Remove participant from team (admin+) — `DELETE /team-memberships/:membershipId?yearId=xxx`
+- [x] Move regular participant to another team (admin+ only) — `PATCH /team-memberships/transfer?yearId=xxx`
+  - Ghost Points: score_events NOT updated on transfer, team-specific task points don't count for new team
+- [x] Promote participant to team lead — `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
+  - 7 preconditions via `getPromotionContext` + pure validators, frontend-orchestrated swap
+- [x] Demote team lead to regular member — `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
+  - Sets `is_team_lead = false`, stays in same team, role unchanged
 
-1. Fetch participant — verify exists, belongs to `yearId`, not already banned
-2. Set `banned = true` on `year_participants`
-3. Delete `team_membership` if exists
-4. Soft delete `score_events` — set `is_deleted = true`
+#### Team Lead Demotion Rules
 
-#### Ban Flow — Team Lead (`user_id` not null, `global_role === 'user'`)
+- **Within same team** — is_team_lead set to false, stays in same team as regular member. Separate action required to remove from team entirely.
+- **When moved to another team as regular member** — old team_membership removed, new team_membership with is_team_lead = false
+- **When moved to another team as new team lead** — old team_membership removed, new team_membership with is_team_lead = true. Blocked if target team already has a lead.
+- **Full demotion (global role → viewer)** — team_membership and year_participant removed for current year
+- In all move scenarios, global_role stays as `user`. Admin manually awards one-time bonus for prior contribution.
 
-1. Fetch participant — verify exists, belongs to `yearId`, not already banned
-2. Disable Supabase account first via Admin API: `updateUserById(userId, { ban_duration: '876000h' })`
-   - If this fails — throw immediately, no DB changes made
-3. Call Supabase RPC function atomically for all DB changes:
-   - Set `banned = true` on `year_participants`
-   - Set `profiles.global_role` to `viewer`
-   - Delete `team_membership`
-   - Delete current year `year_access` record only
-4. If RPC fails — log error, return partial success
+### 4.7 Team Lead Promotion (Global Role — via /roles dashboard)
 
-#### Unban Flow — All Participants
+- [ ] Handled via /roles promotion dashboard — global role change only
+- [ ] year_participant created for most recent year if approved year_access exists at promotion time
+- [ ] Team assignment is a separate explicit step — creates team_membership with is_team_lead = true
 
-Two modes controlled by optional `restoreAccess` query param:
+### 4.8 Tasks & Scoring ✅ DONE
 
-**Mode 1 — Basic Pardon:**
-1. Fetch participant — verify exists, is actually banned
-2. If `user_id` exists — re-enable Supabase account
-3. Call `unban_participant` RPC — sets `banned = false`, restores `score_events`
-4. Return updated participant — role stays as `viewer`, no year_access created
+- [x] Create global task — admin+ (`team_id: null`)
+- [x] Create team-scoped task — admin+ or team lead for own team
+- [x] Get tasks + scores for a year/team — returns `{ tasks, scores }`, participant data served separately from `getTeamYearParticipants`
+- [x] Award score to single participant — team lead for own team (all event types)
+- [x] Award scores to multiple participants for a task (bulk) — team lead for own team, all-or-nothing (no partial inserts)
+- [x] Edit base score value — admin only (PATCH)
 
-**Mode 2 — Full Reinstatement (`restoreAccess=true`):**
-1. Same steps 1–4 as Mode 1
-2. Additionally call `restore_team_lead_access` RPC:
-   - Restores `profiles.global_role` from `previous_role`
-   - Clears `previous_role` to null
-   - Creates `year_access` for current year with `status: approved`
+#### Scoring Rules (Locked)
 
-### Disqualification Logic
-
-- Only applies to volunteers (`user_id = null`)
-- Disqualify only allowed on unlocked years
-- `disqualified = true` — participant stays in team, scores preserved but excluded from leaderboard
-- Undisqualify: sets `disqualified = false` (admin+ only, unlocked year only)
-
-### Scoring
-
-- base: 0–N (max_base_score defined per task)
-- gold: +5, silver: +3, bronze: +2, bonus: +1
 - One base score per participant per task
-- One medal per participant per task (participant cannot hold two medals on the same task)
-- Medal uniqueness per task per team — only one gold, one silver, one bronze across all participants in a team for a given task
-- Medal uniqueness is task-scoped, not global — same participant can hold gold on T1 and gold on T2
-- Medal uniqueness is team-scoped — Team A's medals for T1 are fully independent of Team B's
-- Bonus can stack (unlimited bonus rows)
-- Admin can edit base score value only (PATCH)
-- Team lead can award all score types for own team participants
-- Bulk scoring fails entirely if any validation fails — no partial inserts
-- Score events stored in `score_events` table — auditable, reversible
-- Soft-deleted on participant ban (`is_deleted = true`), restored on unban
-
-### Task Scoping & Ghost Points
-
-- Tasks are either **Global** (`team_id: null`) or **Team-Specific** (`team_id: uuid`)
-- When a participant is transferred between teams, `score_events` are NOT updated
-- Points earned on Team A's specific tasks become **Ghost Points** when participant moves to Team B
-- Leaderboard must filter score_events by task validity for current team
-
-### Team Memberships
-
-- Team lead can only assign unassigned participants to their own team
-- Admin+ can assign any participant to any team
-- Moving a participant between teams (admin+ only):
-  - Regular participant → scores transfer to new team, old membership removed
-  - Team lead → loses is_team_lead on old team, becomes regular participant on new team
-- UI must show confirmation modal before moving any participant
-
-### Year Access Flow
-
-1. User requests access to a year → year_access record (status: pending)
-2. Max 3 requests per user per year (rejected records count, stack in DB)
-3. Admin approves → status: approved (viewer access)
-4. Admin can promote viewer → user (team lead) via separate promotion dashboard
-
-### Role Promotion & Demotion Rules
-
-#### Viewer → Team Lead (user role) Promotion
-
-- global_role updated to `user`
-- If viewer has approved year_access for most recent year → create year_participant for that year only
-- Team assignment is a separate explicit action by admin
-
-#### Team Lead (user) → Admin Promotion
-
-- global_role updated to `admin`
-- Remove team_membership and year_participant for current year
-
-#### Team Lead (user) → Viewer Demotion
-
-- global_role updated to `viewer`
-- Remove team_membership and year_participant for current year
-
-#### Team Lead → Regular Participant (within same team)
-
-- is_team_lead set to false on team_membership
-- global_role stays as `user`
-
-#### Moving a Team Lead to Another Team
-
-- As regular member — old membership removed, new membership with is_team_lead = false
-- As new team lead — old membership removed, new membership with is_team_lead = true
-  - Blocked if target team already has a lead (409)
-- global_role stays as `user` in all move scenarios
-
-#### Removing Year Access
-
-- Removes year_access record
-- Also removes team_membership and year_participant for that year
-
----
-
-## 6. Privacy Model
-
-- email, mobile visible to: admin+, same team lead, self
-  - "same team lead" means the requester is a team lead AND the specific team being queried identically matches their own team (`requestedTeamId === actualTeamId`)
-- All others see masked/null values
-- Enforced in backend service layer, not DB RLS
-
----
-
-## 7. API Structure
-
-### Routes (Built)
-
-```
-/profile
-  POST /bootstrap         — create/update profile from JWT
-  GET  /me                — get own profile
-
-/years
-  POST /                  — create year (superadmin)
-  GET  /                  — get all years with access status
-  POST /:yearId/lock      — lock year (admin+)
-  POST /:yearId/participants               — add single participant (admin+)
-  POST /:yearId/participants/bulk          — bulk CSV upload (admin+)
-  GET  /:yearId/participants               — paginated volunteer list
-  GET  /:yearId/teams/:teamId/participants — team volunteer list (limit 50)
-  GET  /:yearId/team-leads                 — all team leads incl. banned (admin+)
-  PATCH /:yearId/participants/:id
-  PATCH /:yearId/participants/:id/ban
-  PATCH /:yearId/participants/:id/unban
-  PATCH /:yearId/participants/:id/disqualify
-  PATCH /:yearId/participants/:id/undisqualify
-
-/teams
-  POST /create                    — create team (admin+)
-  GET  /                          — get teams by yearId
-  PATCH /:teamId                  — update team name (admin+)
-  POST /year/:yearId/copy         — copy teams from previous year (admin+)
-
-/team-memberships
-  POST /?yearId=xxx                        — assign participant to team
-  DELETE /:membershipId?yearId=xxx         — remove participant from team (admin+)
-  PATCH /transfer?yearId=xxx               — transfer participant to another team (admin+)
-  PATCH /:membershipId/promote?yearId=xxx  — promote to team lead (admin+)
-  PATCH /:membershipId/demote?yearId=xxx   — demote to regular member (admin+)
-
-/year-access
-  POST /                          — request year access
-  GET  /                          — get all requests grouped by status (admin+)
-  GET  /users?yearId=xxx          — list approved users for year (admin+)
-  PATCH /:id/approve              — approve request (admin+)
-  PATCH /:id/reject               — reject request (admin+)
-  DELETE /:userId/remove?yearId=xxx — remove year access + cascade cleanup (admin+)
-
-/roles
-  GET  /users             — list users with global_role (admin+)
-  PATCH /:userId/role     — promote or demote user, body: { currentRole, targetRole } (admin+)
-
-/tasks
-  POST /?yearId=xxx                    — create task (admin+ or team lead for own team)
-  GET  /?yearId=xxx&teamId=xxx         — fetch tasks + scores (viewer+)
-
-/scores
-  POST /?yearId=xxx&teamId=xxx         — award score to single participant (team lead+)
-  POST /bulk?yearId=xxx&teamId=xxx     — bulk award scores for a task, all-or-nothing (team lead+)
-  PATCH /:scoreEventId                 — edit base score value (admin only)
-```
-
-### Planned Routes
-
-```
-/leaderboard
-/audit-logs
-```
-
----
-
-## 8. Validation Pattern
-
-Custom `validate` middleware wraps `@hono/zod-validator`:
-
-```ts
-validate('json', schema);
-validate('query', schema);
-validate('param', schema);
-
-const data = getValidated(c, 'json', schema);
-```
-
-### Schema Files
-
-- `src/schemas/common.schema.ts` — `uuidSchema`, `nameSchema`
-- `src/schemas/years.schema.ts` — `createYearSchema`, `lockYearSchema`
-- `src/schemas/teams.schema.ts` — `createTeamSchema`, `getTeamsSchema`, `updateTeamNameSchema`, `updateTeamNameParamsSchema`, `teamIdsParamsSchema`
-- `src/schemas/year_participants.schema.ts` — `yearParticipantsSchema`, `yearParticipantsParamsSchema`, `getYearParticipantsQuerySchema`, `getTeamParticipantsParamsSchema`, `getYearParticipantsBanParamsSchema`, `yearParticipantsUnbanParamsSchema`, `yearParticipantsUnbanQuerySchema`
-- `src/schemas/year_access.schema.ts` — `requestYearAccessSchema`, `approveRejectYearAccessSchema`
-- `src/schemas/tasks.schema.ts` — `createTaskQuerySchema` (yearId), `createTaskBodySchema` (title, maxBaseScore, teamId?), `getTasksQuerySchema` (yearId + teamId required)
-- `src/schemas/scores.schema.ts` — `eventTypeSchema`, `scoreQuerySchema` (yearId + teamId), `awardScoreBodySchema`, `bulkScoreEntrySchema`, `bulkAwardScoreBodySchema`, `editScoreParamsSchema` (scoreEventId), `editScoreBodySchema` (value)
-
----
-
-## 9. Error Handling
-
-### AppError Class
-
-```ts
-new AppError(message, ERROR_CODE, httpStatus, data?)
-```
-
-### Response Shape
-
-```json
-{
-  "error": "human readable message",
-  "error_code": "MACHINE_READABLE_CODE",
-  "data": {}
-}
-```
-
-### Key Error Codes
-
-- UNAUTHORIZED, FORBIDDEN
-- PARTICIPANT_EMAIL_CONFLICT (409) — email already in use by another participant in the same year (returns conflicting participant name in data)
-- VALIDATION_ERROR (422)
-- YEAR_NOT_FOUND, YEAR_ALREADY_LOCKED
-- TEAM_EXISTS, TEAM_NOT_FOUND
-- PARTICIPANT_BANNED, YEAR_PARTICIPANT_ALREADY_EXISTS
-- YEAR_ACCESS_FETCH_FAILED, YEAR_ACCESS_REQUEST_FAILED
-- REQUEST_ATTEMPTS_EXCEEDED (429)
-- TEAM_LEAD_ALREADY_EXISTS (409) — added for promotion flow
-- USER_NOT_REGISTERED (400) — added for promotion flow
-- YEAR_ACCESS_NOT_APPROVED (403) — added for promotion flow
-- NOT_A_TEAM_LEAD (400) — added for demotion flow
-- ROLE_OUT_OF_SYNC (409) — added for role change flow: body `currentRole` does not match DB `global_role`
-- INVALID_ROLE_TRANSITION (400) — added for role change flow: same role or invalid transition pair
-- ROLE_CHANGE_FAILED (500) — added for role change flow: DB update of `global_role` failed
-- APP_USERS_FETCH_FAILED (500), APP_USERS_NOT_FOUND (404) — added for Auth API `listUsers` in `getAllAppUsers` util
-- TASK_NOT_FOUND (404), TASK_FETCH_FAILED (500), TASK_CREATION_FAILED (500) — added for tasks
-- SCORE_AWARD_FAILED (500), SCORE_EDIT_FAILED (500), SCORE_EVENT_NOT_FOUND (404), SCORE_FETCH_FAILED (500) — added for scores
-- SCORE_DUPLICATE_BASE (409) — participant already has a base score for this task
-- SCORE_DUPLICATE_MEDAL (409) — participant already has a medal for this task
-- MEDAL_TAKEN (409) — that medal type is already awarded to another participant in this team for this task
-- NOT_TEAM_LEAD (403) — requester is not a team lead for the specified team
-- PARTICIPANT_NOT_IN_TEAM (403) — target participant does not belong to the specified team
-- INTERNAL_SERVER_ERROR
-
----
-
-## 10. Bulk Participant Upload
-
-- Endpoint: `POST /years/:yearId/participants/bulk`
-- Format: CSV only (multipart/form-data, field name: `file`)
-- Strategy: Partial success — returns succeeded and failed rows
-- Flow:
-  1. Parse CSV via `@std/csv` with `skipFirstRow: true`
-  2. Loop 1 — Zod validate each row, collect validRows and failed
-  3. Single DB query — `.in('email', validEmails)` for ban/disqualify checks
-  4. Build lookup map (email → most recent record)
-  5. Loop 2 — ban check, duplicate check, disqualify warning
-  6. Hybrid insert — bulk first, fallback to one-by-one on 23505
-  7. Return `{ succeeded, failed }` with status 207
-
----
-
-## 11. Year Access Request Grouping
-
-`GET /year-access?yearId=xxx` returns:
-
-```json
-{
-  "pending": [{ id, user_id, year_id, status, name, email, previous_rejections }],
-  "approved": [{ id, user_id, year_id, status, name, email }],
-  "rejected": [{ user_id, year_id, status, name, email, rejection_count, last_rejected_at }]
-}
-```
-
-- Rejected records stack in DB (unique index only blocks non-rejected duplicates)
-- Grouped in memory — one DB call + one Auth API call
-- Rejected entries aggregated — one per user with count
-
----
-
-## 12. Constants
-
-- `MAX_YEAR_REQUEST_ATTEMPTS = 3` — `src/constants/common.ts`
-- `DEFAULT_PAGE`, `DEFAULT_PAGE_SIZE` — `src/constants/common.ts`
-- `PERMANENT_BAN_DURATION = '876000h'` — `src/constants/common.ts`
-- `Table` enum — all DB table names centralised in `src/constants/common.ts`
-- `YearRoutes`, `TeamRoutes`, `TeamMembershipRoutes`, `YearAccessRoutes`, `ProfileRoutes`, `ParticipantRoutes`, `RolesRoutes`, `TaskRoutes`, `ScoreRoutes` — `src/constants/routes.ts`
-
----
-
-## 13. What's Done
-
-- Auth middleware (supabaseAuth, loadProfile, requireRole, requireYearAccess)
-- Profile bootstrap and fetch
-- Years — create, lock, get all with access status
-- Teams — create, get, update, copy to new year
-- Year participants — single add, bulk CSV upload
-- Year access — request, approve, reject, get all requests
-- `validateYear({ yearId, yearLockedErrorMessage? })` shared utility in `src/utils/years.ts` — verifies year exists (404 `YEAR_NOT_FOUND`), verifies year is not locked (409 `YEAR_ALREADY_LOCKED`), returns year data. Used across all services that require year validation. `yearLockedErrorMessage` is optional — defaults to generic message if omitted.
-- Shared utilities — `getRequesterTeam`, `applyPrivacyMask` in `src/utils/participants.ts`
-- `getYearParticipants` service + `GET /years/:yearId/participants` route
-- `getTeamYearParticipants` service + `GET /years/:yearId/teams/:teamId/participants` route
-- Ban/Unban — complete with Pardon vs Reinstatement pattern, RPC functions, partial success
-- Disqualify/Undisqualify
-- `updateYearParticipant` service + `PATCH /:yearId/participants/:participantId` route --- admin+, partial update of name/email/mobile/regId, empty payload guard (400 `BAD_REQUEST`), email uniqueness check only when email present (409 `YEAR_PARTICIPANT_EMAIL_MISMATCH` with `conflictingParticipantName` in data), year lock enforced
-- `getTeamLeadsForYear` service + `GET /years/:yearId/team-leads` route
-- `addParticipantToTeam` service + `POST /team-memberships?yearId=xxx` route
-- `validateTeamParticipants` shared utility in `src/utils/team_memberships.ts`
-- `removeParticipantFromTeam` service + `DELETE /team-memberships/:membershipId?yearId=xxx` route
-- `transferParticipant` service + `PATCH /team-memberships/transfer?yearId=xxx` route
-- New error codes: `TEAM_LEAD_ALREADY_EXISTS`, `USER_NOT_REGISTERED`, `YEAR_ACCESS_NOT_APPROVED`, `NOT_A_TEAM_LEAD`, `TEAM_MEMBERSHIP_UPDATE_FAILED`
-- `getPromotionContext` utility — 2 parallel queries + sequential profile fetch if user_id exists, returns `PromotionContext`
-- `validateTeamParticipants` updated — now also returns `isTeamLead` field
-- Pure validators — `validateParticipantForPromotion`, `validateYearAccess`, `validateTeamMembership`, `validateTeamLeadConstraint`
-- `promoteToTeamLead` service — year lock check, getPromotionContext, sequential validators, sets `is_team_lead = true`
-- `removeYearAccess` service — rejects year_access first, then if role=user: deletes team_membership + year_participant
-  - Admin/superadmin cannot have their access removed via this endpoint (403)
-  - Viewer: only year_access rejected
-  - User (team lead): year_access rejected + team_membership deleted + year_participant deleted
-  - Rejection counts toward MAX_YEAR_REQUEST_ATTEMPTS — intentional lockout mechanism
-- `DELETE /year-access/:userId/remove?yearId=xxx` route built — admin+
-- `getAllYearAccessProfiles` service built — 1 sequential call (year_access by yearId + approved status) then 2 parallel calls (profiles `.in(userIds)` + `listUsers`), merged in memory via Map, returns `{ id, role, email, name }` per user
-- `GET /year-access/users?yearId=xxx` route built — admin+
-- `demoteFromTeamLead` service — validateTeamParticipants, isTeamLead check, sets `is_team_lead = false`
-- `PATCH /team-memberships/:membershipId/promote?yearId=xxx` route — admin+, body: `{ participantId, teamId }`
-- `PATCH /team-memberships/:membershipId/demote?yearId=xxx` route — admin+, body: `{ teamId }`
-- `getAllAppUsers` utility in `src/utils/users.ts` — wraps Auth Admin API `listUsers`, accepts `allowNoUsers` flag
-- `getAppUsers` service — parallel: Auth API + profiles `.in(global_role, [viewer, user, admin])`, merged via Map, filtered by actor role
-- `updateUserRole` service — fetches target profile, verifies `currentRole` matches DB (409 `ROLE_OUT_OF_SYNC`), validates transition, applies side effects, updates `global_role`
-- `getActiveYear` util — queries `years` where `is_locked IS NULL OR false`, order `created_at DESC`, limit 1
-- `validateRoleTransition` util — checks same-role (400), valid transition set (400), admin vs superadmin-only transitions (403)
-- `applyRoleSideEffects` util — switch on `RoleTransition`, applies DB changes per transition matrix
-  - `viewer->user`: checks approved `year_access`, creates `year_participant` (`mobile: null`, ignores 23505)
-  - `user->viewer` / `user->admin`: deletes `team_membership` if exists, deletes `year_participant`
-  - `viewer->admin`: deletes `year_access` for active year
-  - `admin->viewer`: creates approved `year_access` if not already approved
-  - `admin->user`: creates approved `year_access` if not exists, then creates `year_participant` (`mobile: null`); if participant insert fails after `year_access` created, throws 500 with `data: { yearAccessCreation: true, yearParticipantCreation: false }` to surface partial state
-- `GET /roles/users` route — admin+, returns merged user list filtered by actor role
-- `PATCH /roles/:userId/role` route — admin+, `userId` from param (not body), body: `{ currentRole, targetRole }`
-- `verifyTeamLead({ userId, yearId, teamId })` utility in `src/services/tasks.service.ts` — inner-joins `year_participants → team_memberships` filtered by `team_id` and `is_team_lead = true`, returns boolean
-- `createTask` service — inserts into `tasks` with `year_id`, `title`, `max_base_score`, `team_id` (null for global tasks)
-- `getTasksWithScores` service — two-query strategy: Q1 fetches scorable participant IDs (volunteers only, `user_id IS NULL`, `is_deleted = false`) from `team_memberships → year_participants`; Q2 fetches tasks (global + team-scoped) LEFT JOIN `score_events` with no `!inner` so zero-score tasks still appear; service aggregates flat events into `{ [taskId]: { [participantId]: { base, medal, bonus_count } } }`
-- `awardScore` service — verifies participant belongs to team via `team_memberships`, checks one-base-per-participant constraint, checks one-medal-per-participant constraint, calls `assertMedalNotTaken` async helper for team-level medal uniqueness, inserts `score_event`
-- `bulkAwardScores` service — all-or-nothing: verifies all participants belong to team, fetches all existing events for task+participants upfront, validates every row for base/medal/team-medal constraints before any insert, tracks intra-batch medal collisions via a `batchMedals` Set, single bulk insert only after all validation passes
-- `editBaseScore` service — fetches event, verifies not soft-deleted, verifies `event_type === 'base'` (400 otherwise), updates value
-- `assertMedalNotTaken` private async helper — queries team's participant IDs, checks `score_events` for existing medal of same type on same task, throws `MEDAL_TAKEN` (409) if found
-- `POST /tasks?yearId=xxx` route — `requireRole(User)` + `requireYearAccess`; in-handler: admin+ unrestricted; User role must pass `verifyTeamLead` for provided `teamId`; global task (no `teamId`) requires admin+ (403 otherwise)
-- `GET /tasks?yearId=xxx&teamId=xxx` route — `requireRole(Viewer)` + `requireYearAccess`
-- `POST /scores?yearId=xxx&teamId=xxx` route — `requireRole(User)`, in-handler `verifyTeamLead` check
-- `POST /scores/bulk?yearId=xxx&teamId=xxx` route — `requireRole(User)`, in-handler `verifyTeamLead` check
-- `PATCH /scores/:scoreEventId` route — `requireRole(Admin)` only, no year access check required
-
-### Supabase RPC Functions
-
-- `ban_volunteer(p_participant_id)` — sets `banned = true` on `year_participants`, deletes `team_memberships`, soft-deletes `score_events` (`is_deleted = true`)
-- `ban_team_lead(p_participant_id, p_user_id, p_year_id)` — sets `banned = true` on `year_participants`, saves `global_role` to `previous_role` and demotes to `viewer` on `profiles`, deletes `team_memberships`, deletes `year_access` for that year only
-- `unban_participant(p_participant_id)` — sets `banned = false` on `year_participants`, restores `score_events` (`is_deleted = false`)
-- `restore_team_lead_access(p_user_id, p_year_id)` — restores `global_role` from `previous_role` (throws if null), clears `previous_role`, inserts approved `year_access` for the given year
-
----
-
-## 14. Role Promotion/Demotion Dashboard — Built ✅
-
-### Endpoints
-
-```
-GET  /roles/users              — list users with global_role (admin+)
-PATCH /roles/:userId/role      — promote or demote a user (admin+)
-```
-
-### GET /roles/users
-
-- Parallel: Auth Admin API `listUsers` (perPage: 1000, via `getAllAppUsers`) + `profiles` `.in("global_role", [viewer, user, admin])`
-- Merged in memory via Map on `user.id`
-- **Admin** sees: viewer, user roles only
-- **Superadmin** sees: viewer, user, admin roles (superadmin excluded from management)
-
-### PATCH /roles/:userId/role — Body: `{ currentRole, targetRole }`
-
-- `userId` comes from URL param — NOT from body
-- Fetches target user's actual `global_role` from `profiles` first
-- If `currentRole` in body does not match DB → 409 `ROLE_OUT_OF_SYNC`
-
-#### Role Change Permission Matrix
-
-| Actor       | Allowed Transitions                                          |
-| ----------- | ------------------------------------------------------------ |
-| admin       | viewer ↔ user only                                           |
-| superadmin  | viewer ↔ user, viewer ↔ admin, user ↔ admin                  |
-
-- Same role → 400 `INVALID_ROLE_TRANSITION`
-- Invalid transition pair → 400 `INVALID_ROLE_TRANSITION`
-- Admin attempting admin-scoped transition → 403 `FORBIDDEN`
-- `currentRole` body mismatch with DB → 409 `ROLE_OUT_OF_SYNC`
-
-#### Side Effects Per Transition
-
-| Transition     | Side Effects                                                                                                  |
-| -------------- | ------------------------------------------------------------------------------------------------------------- |
-| viewer → user  | Create `year_participant` (`mobile: null`, ignores 23505) — only if active year exists AND viewer has approved `year_access` |
-| user → viewer  | Delete `team_membership` (if exists) + delete `year_participant` for active year                              |
-| viewer → admin | Delete `year_access` for active year (if exists)                                                              |
-| admin → viewer | Create approved `year_access` for active year (if exists and not already approved)                            |
-| user → admin   | Delete `team_membership` (if exists) + delete `year_participant` for active year                              |
-| admin → user   | Create approved `year_access` (if not exists) + create `year_participant` (`mobile: null`, ignores 23505); partial failure surfaced via `data: { yearAccessCreation: true, yearParticipantCreation: false }` |
-
-#### Active Year Determination
-
-- Query `years` where `is_locked IS NULL OR is_locked = false`, order by `created_at DESC`, limit 1
-- If no active year — skip side effects that depend on it, proceed with role change only
-
-### Files
-
-- `src/utils/users.ts` — `getAllAppUsers(allowNoUsers?)` — shared Auth API wrapper
-- `src/utils/roles.ts` — `getActiveYear`, `validateRoleTransition`, `applyRoleSideEffects`
-- `src/services/roles.ts` — `getAppUsers`, `updateUserRole`
-- `src/routes/roles.routes.ts` — `GET /users`, `PATCH /:userId/role`
-- `src/schemas/roles.schema.ts` — `usersRoleChangeParamsSchema` (userId), `usersRoleChangeBodySchema` (currentRole, targetRole)
-
----
-
-## 15. Tasks & Scoring — Built ✅
-
-### Endpoints
-
-```
-POST  /tasks?yearId=xxx                    — create task (admin+ or team lead for own team)
-GET   /tasks?yearId=xxx&teamId=xxx         — fetch tasks + scores (viewer+)
-POST  /scores?yearId=xxx&teamId=xxx        — award score to single participant (team lead+)
-POST  /scores/bulk?yearId=xxx&teamId=xxx   — bulk award scores, all-or-nothing (team lead+)
-PATCH /scores/:scoreEventId               — edit base score value (admin only)
-```
-
-### POST /tasks
-
-- `yearId` as query param so `requireYearAccess` can inspect it
-- Body: `{ title, maxBaseScore, teamId? }`
-- Authorization in handler (not middleware):
-  - `teamId` provided → admin+ always allowed; User role must pass `verifyTeamLead`
-  - No `teamId` (global task) → admin+ only, User role gets 403 `NOT_TEAM_LEAD`
-
-### GET /tasks
-
-- Returns `{ tasks, scores }` — participant data served separately by `getTeamYearParticipants`
-- Two-query strategy inside service:
-  - Q1: `team_memberships → year_participants!inner` filtered by `team_id`, `year_id`, `user_id IS NULL`, `is_deleted = false` → extract `year_participant_id` list
-  - Q2: `tasks` + `score_events` (no `!inner`) filtered by `year_id`, `team_id.eq.X OR team_id.is.null`, `score_events.year_participant_id IN [Q1 ids]`, `score_events.is_deleted = false`
-  - If Q1 returns no participants, Q2 still runs (returns tasks with empty score arrays)
-
-#### Response Shape
+- One medal per participant per task
+- Medal uniqueness per task per team — only one gold, one silver, one bronze across all team participants for a given task
+- Medal uniqueness is task-scoped — same participant can hold gold on T1 and gold on T2
+- Medal uniqueness is team-scoped — Team A's medals for T1 independent of Team B's
+- Bonus rows are unlimited
+- Score event types: `base | gold | silver | bronze | bonus`
+- Score values: `base` 0–N (caller-supplied); `gold`/`silver`/`bronze`/`bonus` resolved from that team's Team Scores Config (see 4.10) — no longer fixed constants
+- Scoring is blocked (400 `MEDAL_VALUES_NOT_SET`) until a team's medal values are configured
+
+#### GET /tasks Response Shape
+
+Frontend already holds participant data from `getTeamYearParticipants`. Tasks endpoint returns:
 
 ```ts
 {
@@ -703,114 +224,313 @@ PATCH /scores/:scoreEventId               — edit base score value (admin only)
 }
 ```
 
-### POST /scores and POST /scores/bulk
+#### Data Fetching Strategy
 
-- `yearId` + `teamId` as query params (used only for `verifyTeamLead` check; not stored on score events)
-- `verifyTeamLead` must return true before any service call proceeds
+Two queries — participants and tasks are independent, N+1 not viable:
+- Q1: participant IDs (internal only) via `team_memberships → year_participants`, `user_id IS NULL`
+- Q2: `tasks` LEFT JOIN `score_events`, filtered by `year_id`, `team_id OR null`, `year_participant_id IN [Q1 ids]`
+- Service layer aggregates flat rows into nested score map, merged into response
 
-#### Constraint enforcement order (single award)
+### 4.9 Leaderboard ✅ DONE
 
-1. Participant belongs to team (`team_memberships` lookup)
-2. One base per participant per task
-3. One medal per participant per task
-4. Team-level medal uniqueness — `assertMedalNotTaken` queries team's participant IDs then checks `score_events` for same medal type on same task
+- [x] Per-team leaderboard — ranked volunteers within a team
+- [x] Year leaderboard — compares top 2 per team across all teams
+- [x] Excludes disqualified participants
+- [x] Excludes team leads, admins, superadmins
 
-#### Constraint enforcement order (bulk award — all-or-nothing)
+### 4.10 Team Scores Config + Year Scoring Standard
 
-1. All participants belong to team (batch membership check)
-2. Fetch all existing events for task + all team participants in one query
-3. Loop all rows upfront before any insert:
-   - Per-participant base uniqueness
-   - Per-participant medal uniqueness
-   - Team-level medal uniqueness (DB state + `batchMedals` Set for intra-batch collisions)
-4. If any row fails → throw immediately, no inserts
+**Team Scores Config (per team per year)** ✅ DONE
+- [x] `gold`, `silver`, `bronze`, `bonus` columns on `teams` table (integer, nullable) — no migration framework; columns added directly (dev stage, no data)
+- [x] `POST /teams/:teamId/scores-config?yearId=xxx` — set medal values (user+)
+  - All four values required, min(1)
+  - Set once only — 409 `TEAM_SCORES_CONFIG_ALREADY_SET` if already configured
+  - Verifies team belongs to year; blocks if year is locked
+- [x] `GET /teams/:teamId/scores-config?yearId=xxx` — get values / check if set (viewer+, requireYearAccess)
+  - Returns `{ pointsSet, scores: { gold, silver, bronze, bonus } | null }`
+- [x] Scoring blocked until values set — 400 `MEDAL_VALUES_NOT_SET` in `awardScore` + `bulkAwardScores`
+- [x] `resolveEventValue` updated — takes `medalValues` (from `getTeamScoresConfig`) instead of hardcoded map; `awardScore`/`bulkAwardScores` fetch team config upfront and pass `yearId` through
 
-### PATCH /scores/:scoreEventId
+**Year Scoring Standard (global normalization)** ✅ DONE
+- [x] `gold`, `silver`, `bronze`, `bonus` columns on `years` table (integer, nullable) — no migration framework; columns added directly (dev stage, no data)
+- [x] `POST /years/:yearId/scores-standard` — set global standard (admin+)
+  - Set once only — 409 `YEAR_SCORES_STANDARD_ALREADY_SET` if already configured; blocked if year is locked
+- [x] `GET /years/:yearId/scores-standard` — get standard / check if set (viewer+, requireYearAccess)
+  - Returns `{ standardSet, scores: { gold, silver, bronze, bonus } | null }`
+- [x] Updated `leaderboard` Supabase view — adds `raw_score` (sum of all `score_events.value`, used by team leaderboard) and `normalized_score` (medal counts × year standard values + base scores, used by year leaderboard); view recreated directly (dev stage, no migration)
+- [x] `getYearLeaderboard` updated — checks `getYearScoresStandard`, throws 400 `YEAR_SCORES_STANDARD_NOT_SET` if `standardSet` is false, then queries/orders by `normalized_score`
+- [x] `getTeamLeaderboard` updated — queries/orders by `raw_score` instead of `total_score`
+- [x] API response shape unchanged — both leaderboard types still return `total_score` per participant (now sourced from `raw_score` or `normalized_score` depending on context)
 
-- Admin only — no `yearId` / `teamId` context needed
-- Validates `event_type === 'base'` before updating (400 `BAD_REQUEST` if not base)
-- Validates event is not soft-deleted before updating (404 `SCORE_EVENT_NOT_FOUND`)
+### 4.10 Privacy
 
-### Files
+- [x] email and mobile masked for non-admin, non-self, non-team-lead
+- [x] Applied in service layer before response is sent
+- [x] Team lead can see own team's full contact info only (strictly enforced via `requestedTeamId` validation in `getRequesterTeam`)
 
-- `src/schemas/tasks.schema.ts` — `createTaskQuerySchema`, `createTaskBodySchema`, `getTasksQuerySchema`
-- `src/schemas/scores.schema.ts` — `eventTypeSchema`, `scoreQuerySchema`, `awardScoreBodySchema`, `bulkScoreEntrySchema`, `bulkAwardScoreBodySchema`, `editScoreParamsSchema`, `editScoreBodySchema`
-- `src/services/tasks.service.ts` — all service functions + `verifyTeamLead` + `assertMedalNotTaken`
-- `src/routes/tasks.routes.ts` — `POST /`, `GET /`
-- `src/routes/scores.routes.ts` — `POST /`, `POST /bulk`, `PATCH /:scoreEventId`
+### 4.11 Audit Logging
 
-### TypeScript Patterns
+- [ ] Log all admin actions (create, update, ban, score changes)
+- [ ] Stored in audit_logs table
+- [ ] Viewable by superadmin
 
-- No implicit `any` — all Supabase join results cast through named interfaces (`RawTask`, `RawScoreEvent`, `RawMembership`, etc.) using `as unknown as T`
-- `isMedal(eventType: string): eventType is MedalType` type guard narrows medal strings in aggregation loop and constraint checks
-- `EventType` and `BulkScoreEntry` inferred from zod schemas via `zod.infer<>` — types stay in sync with validation
+### 4.12 Email Notifications (Brevo)
+
+- [ ] Year access approved email
+- [ ] Year access rejected email
+- [ ] Magic link email (if re-enabled)
+
+### 4.13 Testing
+
+- [ ] Unit tests for service layer
+- [ ] Integration tests for all endpoints
+- [ ] Bruno collection for manual API testing
 
 ---
 
-## 16. What's Next (in order)
+## 5. Implementation Plan
 
-1. Team Scores Config (medal values per team per year) — see Section 17 for full spec
-2. Testing suite
+### Phase 1 — Core Infrastructure ✅ DONE
+
+- Biome linting/formatting configured
+- Git pre-commit hooks set up
+- Table enum and route constants centralised
+- Auth middleware (supabaseAuth, loadProfile, requireRole)
+- Error handling (AppError, global handler, error codes)
+- Zod validation pattern (validate middleware, getValidated helper)
+- Profile bootstrap
+- Year CRUD
+- Team CRUD
+- Year access request flow
+
+### Phase 2 — Participant Management ✅ DONE
+
+- [x] Single participant add
+- [x] Bulk CSV upload
+- [x] Participant listing design — filtering, sorting, role enforcement, filter method decisions
+- [x] Zod schemas — `getYearParticipantsQuerySchema`, `getTeamParticipantsParamsSchema`
+- [x] Shared utilities — `getRequesterTeam`, `applyPrivacyMask` in `src/utils/participants.ts`
+- [x] Get year volunteers — paginated, DB-level filtering/sorting, privacy masked
+- [x] Get team volunteers — non-paginated, privacy masked, inner join on team_memberships, limit 50
+- [x] Ban/Unban — complete with Pardon vs Reinstatement pattern, RPC functions, partial success handling
+- [x] Disqualify/Undisqualify
+
+### Phase 3 — Team Memberships & Promotion ✅ DONE
+
+- [x] Assign participant to team (admin+ any team, team lead own team only)
+- [x] Remove participant from team (admin+)
+- [x] Move participant between teams (admin+ only, ghost points decision locked)
+- [x] New error codes — `TEAM_LEAD_ALREADY_EXISTS`, `USER_NOT_REGISTERED`, `YEAR_ACCESS_NOT_APPROVED`, `NOT_A_TEAM_LEAD`
+- [x] `getPromotionContext` utility in `src/utils/team_memberships.ts`
+- [x] Pure validator functions in `src/utils/team_memberships.ts`
+- [x] `promoteToTeamLead` service + `PATCH /team-memberships/:membershipId/promote?yearId=xxx`
+- [x] `demoteFromTeamLead` service + `PATCH /team-memberships/:membershipId/demote?yearId=xxx`
+
+### Phase 4 — Role Promotion/Demotion Dashboard ✅ DONE
+
+- [x] `src/utils/users.ts` — `getAllAppUsers(allowNoUsers?)` shared Auth API wrapper
+- [x] `src/utils/roles.ts` — `getActiveYear`, `validateRoleTransition`, `applyRoleSideEffects`
+- [x] `getAppUsers` service + `GET /roles/users` route
+- [x] `updateUserRole` service + `PATCH /roles/:userId/role` route
+
+### Phase 5 — Tasks & Scoring ✅ DONE
+
+- [x] `src/schemas/tasks.schema.ts` — `createTaskQuerySchema` (yearId), `createTaskBodySchema` (title, maxBaseScore, teamId?), `getTasksQuerySchema` (yearId + teamId)
+- [x] `src/schemas/scores.schema.ts` — `eventTypeSchema`, `scoreQuerySchema`, `awardScoreBodySchema`, `bulkAwardScoreBodySchema`, `bulkScoreEntrySchema`, `editScoreParamsSchema`, `editScoreBodySchema`
+- [x] `verifyTeamLead({ userId, yearId, teamId })` utility in `src/services/tasks.service.ts` — inner-joins `year_participants → team_memberships`, returns boolean
+- [x] `createTask` service — inserts into `tasks` with `year_id`, `title`, `max_base_score`, `team_id` (null for global)
+- [x] `getTasksWithScores` service — two-query strategy: Q1 resolves scorable participant IDs (`user_id IS NULL`, `is_deleted = false`); Q2 fetches tasks LEFT JOIN score_events filtered by `year_id`, `team_id OR null`, participant IDs; service layer aggregates flat events into `{ [taskId]: { [participantId]: { base, medal, bonus_count } } }`
+- [x] `awardScore` service — verifies participant belongs to team, checks one-base constraint, checks one-medal-per-participant constraint, checks team-level medal uniqueness (separate `assertMedalNotTaken` async helper), inserts score event
+- [x] `bulkAwardScores` service — all-or-nothing: verifies all participants belong to team, fetches all existing events upfront, validates every row against base/medal/medal-uniqueness constraints before any insert, tracks intra-batch medal collisions via `batchMedals` Set
+- [x] `editBaseScore` service — fetches event, verifies not deleted, verifies `event_type === 'base'`, updates value
+- [x] `POST /tasks?yearId=xxx` route — `requireRole(User)` + `requireYearAccess`, in-handler: admin+ allowed always; User role must pass `verifyTeamLead` for provided `teamId`; global task (no `teamId`) requires admin+
+- [x] `GET /tasks?yearId=xxx&teamId=xxx` route — `requireRole(Viewer)` + `requireYearAccess`
+- [x] `POST /scores?yearId=xxx&teamId=xxx` route — `requireRole(User)`, in-handler `verifyTeamLead` check
+- [x] `POST /scores/bulk?yearId=xxx&teamId=xxx` route — `requireRole(User)`, in-handler `verifyTeamLead` check
+- [x] `PATCH /scores/:scoreEventId` route — `requireRole(Admin)` only
+- [x] New error codes — `TASK_NOT_FOUND`, `TASK_FETCH_FAILED`, `TASK_CREATION_FAILED`, `SCORE_AWARD_FAILED`, `SCORE_EDIT_FAILED`, `SCORE_EVENT_NOT_FOUND`, `SCORE_FETCH_FAILED`, `SCORE_DUPLICATE_BASE`, `SCORE_DUPLICATE_MEDAL`, `MEDAL_TAKEN`, `NOT_TEAM_LEAD`, `PARTICIPANT_NOT_IN_TEAM`
+- [x] `TaskRoutes`, `ScoreRoutes` added to `src/constants/routes.ts`
+- [x] `/tasks` and `/scores` routers registered in `src/main.ts`
+
+### Phase 6 — Team Scores Config + Year Scoring Standard ✅ DONE
+
+**Team Scores Config** ✅ DONE
+- [x] `gold`, `silver`, `bronze`, `bonus` nullable integer columns on `teams` table (added directly — dev stage, no migration)
+- [x] `teamScoresConfigParamsSchema`, `teamScoresConfigQuerySchema`, `setTeamScoresConfigBodySchema` in `src/schemas/teams.schema.ts`
+- [x] `setTeamScoresConfig` service (`src/services/team_scores_config.ts`) — verifies team belongs to year, blocks if year locked, set-once enforcement (409), column update
+- [x] `getTeamScoresConfig` service — verifies team belongs to year, returns `{ pointsSet, scores }`
+- [x] `POST /teams/:teamId/scores-config?yearId=xxx` route — `requireRole(User)` + `requireYearAccess`
+- [x] `GET /teams/:teamId/scores-config?yearId=xxx` route — `requireRole(Viewer)` + `requireYearAccess`
+- [x] Updated `awardScore` + `bulkAwardScores` (now require `yearId` param) — fetch team medal values upfront via `getTeamScoresConfig`, throw 400 `MEDAL_VALUES_NOT_SET` if not configured
+- [x] Updated `resolveEventValue` — now takes `medalValues: MedalValues` param, uses DB values instead of hardcoded `FIXED_EVENT_VALUES` map
+- [x] `awardScore`'s `value` field changed to optional (`value?: number`) to match `awardScoreBodySchema` and `resolveEventValue`'s signature
+- [x] `scores.routes.ts` updated — passes `yearId` through to `awardScore` and `bulkAwardScores`
+- [x] New error codes: `TEAM_SCORES_CONFIG_ALREADY_SET` (409), `TEAM_SCORES_CONFIG_FETCH_FAILED` (500), `TEAM_SCORES_CONFIG_SET_FAILED` (500), `MEDAL_VALUES_NOT_SET` (400)
+- [x] `TeamScoresConfigRoutes` added to `src/constants/routes.ts`; router registered in `src/main.ts`
+
+**Year Scoring Standard** ✅ DONE
+- [x] `gold`, `silver`, `bronze`, `bonus` nullable integer columns on `years` table (added directly — dev stage, no migration)
+- [x] `yearScoresStandardParamsSchema`, `setYearScoresStandardBodySchema` in `src/schemas/years.schema.ts`
+- [x] `setYearScoresStandard` service (`src/services/year_scores_standard.ts`) — admin-only, blocks if year locked, set-once enforcement (409), column update
+- [x] `getYearScoresStandard` service — returns `{ standardSet, scores }`
+- [x] `POST /:yearId/scores-standard` route (in `years.routes.ts`) — `requireRole(Admin)`
+- [x] `GET /:yearId/scores-standard` route — `requireRole(Viewer)` + `requireYearAccess`
+- [x] New error codes: `YEAR_SCORES_STANDARD_ALREADY_SET` (409), `YEAR_SCORES_STANDARD_FETCH_FAILED` (500), `YEAR_SCORES_STANDARD_SET_FAILED` (500), `YEAR_SCORES_STANDARD_NOT_SET` (400)
+- [x] `YearScoresStandardRoutes` added to `src/constants/routes.ts`
+- [x] `leaderboard` Supabase view recreated — `INNER JOIN years` for `MAX(y.gold/silver/bronze/bonus)`, adds `raw_score` (sum of `score_events.value`) and `normalized_score` (medal-count × year-standard + base scores); view recreated directly (dev stage, no migration)
+- [x] `getYearLeaderboard` (`src/services/leadership.ts`) — calls `getYearScoresStandard`, throws 400 `YEAR_SCORES_STANDARD_NOT_SET` if `standardSet` is false, queries/orders by `normalized_score`
+- [x] `getTeamLeaderboard` — queries/orders by `raw_score` instead of `total_score`; API response field name (`total_score`) unchanged for frontend compatibility
+
+### Phase 7 — Leaderboard ✅ DONE
+
+- [x] `leaderboard` Supabase view — ghost points excluded, disqualified and staff excluded, soft-deleted score events excluded
+- [x] `resolveEventValue` — at the time of this phase, fixed medal/bonus values were enforced in service layer (gold=5, silver=3, bronze=2, bonus=1); `value` optional in award schemas. **Superseded by Phase 6** — values now resolved per-team from Team Scores Config
+- [x] `getTeamLeaderboard` + `getYearLeaderboard` services — dense rank applied in memory
+- [x] `GET /leaderboard?yearId=xxx&teamId=xxx` route — single endpoint, `teamId` optional; `requireRole(Viewer)` + `requireYearAccess`
+- [x] `assignDenseRank` helper — tied scores share rank; year leaderboard top 2 by rank per team
+- [x] New error code: `LEADERBOARD_FETCH_FAILED` (500)
+
+### Phase 8 — Notifications
+
+- Brevo email integration
+- Access approval/rejection emails
+
+### Phase 9 — Audit Logging
+
+- Log admin actions
+- Audit log viewer endpoint
+
+### Phase 10 — Testing Suite
+
+- Bruno collection (manual)
+- Unit tests (service layer)
+- Integration tests (endpoints)
 
 ---
 
-## 17. Next Up — Team Scores Config
+## 6. Key Technical Decisions
 
-Per-team, per-year medal/bonus point values. Currently `resolveEventValue` uses hardcoded values (gold=5, silver=3, bronze=2, bonus=1). This feature replaces those with configurable values stored on the `teams` table.
+| Decision                               | Choice                                                                    | Reason                                                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Validation                             | Zod v4 via custom `validate` middleware                                   | Type-safe, consistent across routes                                                                                             |
+| Auth                                   | Supabase JWT via JWKS                                                     | Secure, no custom auth needed                                                                                                   |
+| Privacy                                | Backend masking, not DB RLS                                               | More flexible, easier to maintain                                                                                               |
+| Bulk upload                            | CSV only, partial success (207)                                           | Simple, Google Sheets compatible                                                                                                |
+| Ban check                              | Most recent record per email                                              | System enforces ban at registration                                                                                             |
+| Year access cache                      | No cache, fresh DB per request                                            | Serverless constraint (Deno Deploy)                                                                                             |
+| Error response                         | `{ error, error_code, data? }`                                            | Machine readable for frontend                                                                                                   |
+| Scoring                                | event-based (score_events table)                                          | Auditable, reversible                                                                                                           |
+| Leaderboard                            | Derived view from score_events                                            | Always accurate, no denormalization                                                                                             |
+| Participant filter method              | `ilike '%value%'` (contains)                                              | Better UX at BCC's scale; sequential scan cost negligible at 100–500 rows/year                                                  |
+| Restricted param enforcement           | Silent ignore based on role                                               | Endpoint is accessible to all; only specific params are restricted; 403 would misrepresent access                               |
+| Team view sort/filter                  | Client-side via TanStack Table                                            | No pagination; full dataset in memory; no API changes needed                                                                    |
+| Banned participants in listing         | Excluded entirely                                                         | Separate admin-only page for ban management within year                                                                         |
+| Disqualified in listing                | Included                                                                  | Separate admin-only page for disqualify management; admin can undisqualify                                                      |
+| Role promotion/demotion                | Global role change only via separate dashboard                            | Role is system-wide, not year-scoped; team assignment is a separate step                                                        |
+| Year creation guard                    | Block if any unlocked year exists                                         | One active year at a time — BCC runs one event at a time                                                                        |
+| Team lead demotion within team         | is_team_lead = false, stays in team                                       | Avoids extra admin friction; removal is a separate explicit action                                                              |
+| Remove year access                     | Cascade delete year_access + team_membership + year_participant           | Keeps data consistent; team leads have no scores, safe to delete                                                                |
+| year_participant creation on promotion | Created for most recent year if approved year_access exists               | Avoids creating orphaned records across all years; most recent year is the active one                                           |
+| Ban atomicity                          | Best effort: Auth API disable first, then Supabase RPC for all DB changes | Auth API is outside DB transaction boundary; RPC handles DB atomicity; partial success surfaced if RPC fails after auth disable |
+| score_events on ban                    | Soft delete (`is_deleted = true`)                                         | Preserves audit trail; reversible on unban                                                                                      |
+| Ban scope                              | Single year_participant record only                                       | Registration check against most recent record enforces permanent ban system-wide                                                |
+| Team lead ban — year_access cleanup    | Delete current year only                                                  | Historical year_access records preserved; only active year access removed                                                       |
+| Roles endpoint structure               | Single `PATCH /roles/:userId/role` with `{ currentRole, targetRole }` body | Avoids two endpoints with identical auth/side-effect logic; direction inferred from payload |
+| Roles — admin visibility scope         | Admin sees viewer/user only; superadmin sees viewer/user/admin            | Superadmin management out of scope for admin; superadmin role itself never manageable       |
+| Roles — invalid transition handling    | 400 BAD_REQUEST; same-role also 400                                       | Frontend prevents this; API enforces it independently                                       |
+| Roles — active year for side effects   | `is_locked IS NULL OR false`, order by `created_at DESC`, take first      | Business rule already guarantees at most one unlocked year                                  |
+| Roles — currentRole verification        | Fetch actual `global_role` from DB, compare to `currentRole` in body; 409 `ROLE_OUT_OF_SYNC` on mismatch | Frontend state may be stale; side effects must execute against verified state, not caller assumptions |
+| Roles — no active year                 | Skip dependent side effects, proceed with role change only                | Role is global; active year is contextual — missing year should not block role change       |
+| Team lead promotion error code         | `TEAM_LEAD_ALREADY_EXISTS` (chosen over `TEAM_LEAD_EXISTS`)               | More descriptive; frontend not yet built so no contract to break                                                                |
+| Medal/bonus values                     | Per-team configurable via Team Scores Config, set once (409 if reconfigured) | Different teams may want different point structures; immutability avoids retroactive score drift                              |
+| Scoring gate                           | 400 `MEDAL_VALUES_NOT_SET` until team config is set                       | Prevents scores being recorded with undefined point values                                                                     |
+| Year scoring standard                  | Single global set-once standard per year (admin-only), separate from per-team config | Provides a normalization baseline for cross-team year leaderboard (raw vs normalized score)                                    |
+| DB schema changes (Phase 6)            | Columns added directly to `teams`/`years`, no migration files             | Project in dev stage, no production data yet — migration framework deferred                                                    |
+| Leaderboard normalization               | `leaderboard` view computes both `raw_score` and `normalized_score`; team leaderboard uses `raw_score`, year leaderboard uses `normalized_score`; API still returns `total_score` field for both | Single view serves both leaderboard types without duplication; no frontend contract change needed |
 
-### DB Changes
+---
 
-- Add `gold` (integer, nullable), `silver` (integer, nullable), `bronze` (integer, nullable), `bonus` (integer, nullable) columns to `teams` table
-- All null by default — not set at team creation or copy time
-- Set once per team — enforced in service layer (not DB trigger)
-
-### Endpoints
+## 7. API Route Summary
 
 ```
-POST  /teams/:teamId/scores-config?yearId=xxx  — set medal values (user+, requireYearAccess)
-GET   /teams/:teamId/scores-config?yearId=xxx  — get medal values / check if set (viewer+, requireYearAccess)
+/profile
+  POST  /bootstrap                          — auto-create profile on login
+  GET   /me                                 — get own profile
+
+/years
+  POST  /                                   — create year (superadmin)
+  GET   /                                   — list years with access status
+  POST  /:yearId/lock                       — lock year (admin+)
+  POST  /:yearId/participants               — add participant (admin+)
+  POST  /:yearId/participants/bulk          — bulk CSV upload (admin+)
+  GET   /:yearId/participants               — paginated volunteer list (any with year access)
+  GET   /:yearId/teams/:teamId/participants — team volunteer list (any with year access)
+  GET   /:yearId/team-leads                 — all team leads incl. banned (admin+)
+  PATCH /:yearId/participants/:id               — update participant details (admin+)
+  PATCH /:yearId/participants/:id/ban
+  PATCH /:yearId/participants/:id/unban
+  PATCH /:yearId/participants/:id/disqualify
+  PATCH /:yearId/participants/:id/undisqualify
+  POST  /:yearId/scores-standard            — set year scoring standard, set-once (admin+)
+  GET   /:yearId/scores-standard            — get year scoring standard / check if set (viewer+)
+
+/teams
+  POST  /create                             — create team (admin+)
+  GET   /                                   — list teams for year
+  PATCH /:teamId                            — update team name (admin+)
+  POST  /year/:yearId/copy                  — copy teams from previous year (admin+)
+  POST  /:teamId/scores-config?yearId=xxx   — set team medal values, set-once (user+)
+  GET   /:teamId/scores-config?yearId=xxx   — get team medal values / check if set (viewer+)
+
+/team-memberships
+  POST  /?yearId=xxx                        — assign participant to team (user+)
+  DELETE /:membershipId?yearId=xxx          — remove from team (admin+)
+  PATCH /transfer?yearId=xxx                — move participant to another team (admin+)
+  PATCH /:membershipId/promote?yearId=xxx   — promote to team lead (admin+)
+  PATCH /:membershipId/demote?yearId=xxx    — demote to regular member (admin+)
+
+/year-access
+  POST  /                                   — request year access
+  GET   /                                   — view all requests grouped (admin+)
+  GET   /users?yearId=xxx                   — list approved users for year (admin+)
+  PATCH /:id/approve                        — approve request (admin+)
+  PATCH /:id/reject                         — reject request (admin+)
+  DELETE /:userId/remove?yearId=xxx             — remove year access + cascade cleanup (admin+)
+
+/roles
+  GET   /users                              — list users with global_role, filtered by actor role (admin+)
+  PATCH /:userId/role                       — promote or demote, body: { currentRole, targetRole } (admin+)
+
+/tasks
+  POST  /?yearId=xxx                        — create task (admin+ or team lead for own team)
+  GET   /?yearId=xxx&teamId=xxx             — fetch tasks + scores (viewer+)
+
+/scores
+  POST  /?yearId=xxx&teamId=xxx             — award score to single participant (team lead+); 400 MEDAL_VALUES_NOT_SET if team scores config not set
+  POST  /bulk?yearId=xxx&teamId=xxx         — award scores to multiple participants for a task (team lead+), all-or-nothing; same gating
+  PATCH /:scoreEventId                      — edit base score value (admin only)
+
+/leaderboard
+  GET   /?yearId=xxx&teamId=xxx             — team or year leaderboard, teamId optional (viewer+); team leaderboard ranks by raw_score, year leaderboard ranks by normalized_score and returns 400 YEAR_SCORES_STANDARD_NOT_SET if year standard not configured
+
+/audit-logs                                 — PLANNED
 ```
 
-### POST /teams/:teamId/scores-config
+---
 
-- Body: `{ gold, silver, bronze, bonus }` — all required integers, min(1)
-- Verify `teamId` belongs to `yearId` — if not, 404
-- If any of gold/silver/bronze/bonus already set on team → 409 `TEAM_SCORES_CONFIG_ALREADY_SET`
-- Otherwise update all four columns on `teams` row
+## 8. Infrastructure
 
-### GET /teams/:teamId/scores-config
+| Service     | Usage             | Tier |
+| ----------- | ----------------- | ---- |
+| Deno Deploy | Backend hosting   | Free |
+| Supabase    | PostgreSQL + Auth | Free |
+| Brevo       | Email sending     | Free |
+| GitHub      | Source control    | Free |
 
-- Verify `teamId` belongs to `yearId` — if not, 404
-- Response shape:
+---
 
-```json
-// not set
-{ "pointsSet": false, "scores": null }
+## 9. What's Next (Immediate)
 
-// set
-{ "pointsSet": true, "scores": { "gold": 100, "silver": 50, "bronze": 25, "bonus": 10 } }
-```
-
-### Scoring Enforcement (awardScore + bulkAwardScores)
-
-- At the top of both functions, after membership check, fetch team's `gold/silver/bronze/bonus` columns
-- If any are null → throw 400 `MEDAL_VALUES_NOT_SET`
-- Replace `resolveEventValue` hardcoded map with values fetched from DB
-
-### New Schemas (additions to `src/schemas/teams.schema.ts`)
-
-- `setTeamScoresConfigParamsSchema` — `teamId` (uuid)
-- `setTeamScoresConfigQuerySchema` — `yearId` (uuid)
-- `setTeamScoresConfigBodySchema` — `{ gold, silver, bronze, bonus }` all `z.number().int().min(1)`
-- `getTeamScoresConfigParamsSchema` — `teamId` (uuid)
-- `getTeamScoresConfigQuerySchema` — `yearId` (uuid)
-
-### New Service Functions
-
-- `setTeamScoresConfig` in `src/services/teams.ts`
-- `getTeamScoresConfig` in `src/services/teams.ts`
-
-### New Error Codes
-
-- `TEAM_SCORES_CONFIG_ALREADY_SET` (409) — medal values already set for this team, cannot be changed
-- `MEDAL_VALUES_NOT_SET` (400) — team has not configured medal values yet, scoring blocked
+1. Phase 8 — Notifications (Brevo email integration)
+2. Phase 9 — Audit Logging
+3. Phase 10 — Testing Suite

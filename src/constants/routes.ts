@@ -76,3 +76,14 @@ export const LeaderboardRoutes = {
   Base: "/leaderboard",
   GetLeaderboard: "/",
 } as const;
+
+export const TeamScoresConfigRoutes = {
+  Base: "/teams",
+  SetConfig: "/:teamId/scores-config",
+  GetConfig: "/:teamId/scores-config",
+} as const;
+
+export const YearScoresStandardRoutes = {
+  SetStandard: "/:yearId/scores-standard",
+  GetStandard: "/:yearId/scores-standard",
+} as const;

@@ -1,14 +1,27 @@
 import { Hono } from "hono";
-import { YearRoutes } from "@/constants/routes.ts";
-import { loadProfile, requireRole, supabaseAuth } from "@/middleware";
+import { YearRoutes, YearScoresStandardRoutes } from "@/constants/routes.ts";
+import {
+  loadProfile,
+  requireRole,
+  requireYearAccess,
+  supabaseAuth,
+} from "@/middleware";
 import { yearParticipantsParamsSchema } from "@/schemas/year_participants.schema.ts";
-import { createYearSchema, lockYearSchema } from "@/schemas/years.schema.ts";
+import {
+  createYearSchema,
+  lockYearSchema,
+  setYearScoresStandardBodySchema,
+  yearScoresStandardParamsSchema,
+} from "@/schemas/years.schema.ts";
 import {
   createYear,
   getTeamLeadsForYear,
+  getYearScoresStandard,
   getYears,
   lockYear,
+  setYearScoresStandard,
 } from "@/services";
+
 import { type AppContext, Role } from "@/types";
 
 import { getValidated, validate } from "@/utils/validate.ts";
@@ -64,6 +77,39 @@ router.get(
     const { yearId } = getValidated(c, "param", yearParticipantsParamsSchema);
 
     const result = await getTeamLeadsForYear(yearId);
+
+    return c.json(result, 200);
+  },
+);
+
+router.post(
+  YearScoresStandardRoutes.SetStandard,
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Admin),
+  validate("param", yearScoresStandardParamsSchema),
+  validate("json", setYearScoresStandardBodySchema),
+  async (c) => {
+    const { yearId } = getValidated(c, "param", yearScoresStandardParamsSchema);
+    const values = getValidated(c, "json", setYearScoresStandardBodySchema);
+
+    const result = await setYearScoresStandard({ yearId, values });
+
+    return c.json(result, 201);
+  },
+);
+
+router.get(
+  YearScoresStandardRoutes.GetStandard,
+  supabaseAuth,
+  loadProfile,
+  requireRole(Role.Viewer),
+  requireYearAccess,
+  validate("param", yearScoresStandardParamsSchema),
+  async (c) => {
+    const { yearId } = getValidated(c, "param", yearScoresStandardParamsSchema);
+
+    const result = await getYearScoresStandard({ yearId });
 
     return c.json(result, 200);
   },
